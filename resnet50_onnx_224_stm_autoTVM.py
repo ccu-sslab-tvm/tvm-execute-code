@@ -6,19 +6,19 @@
 目前已知問題： 無法使用 zephyr 燒錄至 stm32f429 開發板上，目前無法執行
 '''
 
-import os
-import onnx
-import pathlib
 import json
-import numpy
+import os
+import pathlib
 import tarfile
-import tvm
+from datetime import datetime
 
-from tvm import relay, autotvm, transform
+import numpy
+import onnx
+import tvm
+from PIL import Image
+from tvm import autotvm, relay, transform
 from tvm.autotvm.tuner import XGBTuner
 from tvm.relay.backend import Executor, Runtime
-from PIL import Image
-from datetime import datetime
 
 from post_process import post_process_resnet50 as post
 

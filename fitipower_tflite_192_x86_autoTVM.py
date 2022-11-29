@@ -9,17 +9,16 @@
 '''
 
 import os
-import numpy
 import tarfile
-import tvm
-
-from tvm import relay, autotvm, transform
-from tvm.autotvm.tuner import XGBTuner
-from tvm.autotvm.graph_tuner import DPTuner, PBQPTuner
-from tvm.relay.backend import Executor
-from tvm.contrib import graph_executor
-from PIL import Image
 from datetime import datetime
+
+import numpy
+import tvm
+from PIL import Image
+from tvm import autotvm, relay, transform
+from tvm.autotvm.tuner import XGBTuner
+from tvm.contrib import graph_executor
+from tvm.relay.backend import Executor
 
 from post_process import post_process_fitipower as post
 
@@ -28,7 +27,6 @@ output_folder_path = './test_outputs'
 output_path = output_folder_path + '/fitipower_tflite_192_x86_autoTVM'
 model_folder_path = './model'
 img_folder_path = './img/'
-tvm_temp_path = '/home/yang880519/tvm_temp' # Warning：This folder will be removed every time.
 
 # TVM IR output setting
 IR_output = True # Output relay & params or not
@@ -36,11 +34,6 @@ transfer_layout = True # 是否進行 layout 轉換
 original_relay_path = output_path + '/original_realy.txt'
 original_params_path = output_path + '/original_params.txt'
 converted_relay = output_path + '/converted_mod.txt'
-
-# board using setting
-use_board = True # Use board or the simulator
-simulator = 'qemu_x86'
-physical_hw = 'stm32f429i_disc1'
 
 # model using setting
 model_path = model_folder_path + '/yolov5_704_p-0.9474_r-0.9408_map50-0.6404_192x192_ch1_ReLU-int8.tflite'

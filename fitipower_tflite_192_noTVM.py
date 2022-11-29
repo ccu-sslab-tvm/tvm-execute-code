@@ -9,12 +9,13 @@ By 陳洧成
 '''
 
 import os
-from tkinter import W, Y
-import cv2
 import sys
+from datetime import datetime
+from tkinter import W, Y
+
+import cv2
 import numpy as np
 import tensorflow as tf
-from datetime import datetime
 
 np.set_printoptions(threshold=sys.maxsize)
 

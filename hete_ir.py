@@ -1,15 +1,16 @@
+import os
 from distutils.log import Log
 from re import S
+
+import numpy as np
 import tvm
-from tvm.ir.expr import RelayExpr
-from tvm.ir.type import RelayRefType
 import tvm.relay as relay
 from tvm import runtime
-import numpy as np
-from tvm.relay import create_executor
 from tvm.contrib import graph_executor
-import os
 from tvm.ir import Op
+from tvm.ir.expr import RelayExpr
+from tvm.ir.type import RelayRefType
+from tvm.relay import create_executor
 
 relay.RefWrite
 

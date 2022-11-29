@@ -6,17 +6,17 @@
 目前已知問題： 無
 '''
 
+import json
 import os
 import pathlib
-import json
-import numpy
 import tarfile
-import tvm
+from datetime import datetime
 
-from tvm import relay, autotvm, transform
+import numpy
+import tvm
+from tvm import autotvm, relay, transform
 from tvm.autotvm.tuner import XGBTuner
 from tvm.relay.backend import Executor, Runtime
-from datetime import datetime
 
 # path setting
 output_folder_path = './test_outputs'
