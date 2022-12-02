@@ -1,0 +1,206 @@
+'''
+使用模型： yolov5_704_p-0.9474_r-0.9408_map50-0.6404_192x192_ch1_ReLU-int8.tflite
+
+手動開啟 rpc tracker 與 rpc sercer 並連接，使用 rpc 功能對連接的開發板進行優化，包含 autoScheduler 功能
+
+天鈺模型，已可以正確辨識天鈺的資料集
+
+目前已知問題： 無
+'''
+
+import os
+import tarfile
+from datetime import datetime
+
+import numpy
+import tvm
+from PIL import Image
+from tvm import auto_scheduler, relay, transform
+from tvm.contrib import graph_executor
+from tvm.contrib.utils import tempdir
+from tvm.relay.backend import Executor
+
+from post_process import post_process_fitipower as post
+
+# path setting
+output_folder_path = './test_outputs'
+output_path = output_folder_path + '/fitipower_tflite_192_rpc_autoScheduler'
+model_folder_path = './model'
+img_folder_path = './img/'
+
+# TVM IR output setting
+IR_output = True # Output relay & params or not
+transfer_layout = True # 是否進行 layout 轉換
+original_relay_path = output_path + '/original_realy.txt'
+original_params_path = output_path + '/original_params.txt'
+converted_relay = output_path + '/converted_mod.txt'
+
+# model using setting
+model_path = model_folder_path + '/yolov5_704_p-0.9474_r-0.9408_map50-0.6404_192x192_ch1_ReLU-int8.tflite'
+input_name = 'input_1_int8'
+input_shape = (1, 192, 192, 1)
+input_dtype = 'int8'
+
+# input image setting
+img_name = '202205051553337.jpeg'
+img_path = img_folder_path + img_name
+
+# optimize setting
+opt_level = 3
+
+#rpc setting
+device_key = 'KV260'
+rpc_host = '0.0.0.0'
+rpc_port = 9190
+
+# autoScheduler setting
+use_autoScheduler = False
+retune = False
+number = 100
+repeat = 50
+trails = 1500
+early_stopping = 100
+min_repeat_ms = 0 # since we're tuning on a CPU, can be set to 0
+timeout = 100
+records_path = output_path + '/autoScheduler.json'
+
+# make C code
+output_c_code = True
+tar_file_path = output_path + '/c_code.tar'
+
+# executor mode
+executor_mode = 'graph' # 'graph' or 'aot'
+
+#------------------------------------------------------------------------------
+# make output folder
+if not os.path.exists(output_path):
+    os.mkdir(output_path)
+
+# load model by the frontend
+model_buffer = open(model_path, 'rb').read()
+
+try:
+    import tflite
+    model = tflite.Model.GetRootAsModel(model_buffer, 0)
+except AttributeError:
+    import tflite.Model
+    model = tflite.Model.Model.GetRootAsModel(model_buffer, 0)
+
+# preprocesss input image
+img_data = Image.open(img_path).resize((192, 192))
+img_data = img_data.convert('L')
+img_data = numpy.array(img_data) - 128 # 量化到 int8 空間
+img_data = numpy.expand_dims(img_data, axis = 0)
+img_data = numpy.expand_dims(img_data, axis = -1)
+img_data = numpy.asarray(img_data).astype('int8')
+
+# load frontend model to TVM IR
+mod, params = relay.frontend.from_tflite(
+    model = model,
+    shape_dict = {input_name: input_shape},
+    dtype_dict = {input_name: input_dtype}
+)
+
+if IR_output:
+    print(mod, file = open(original_relay_path, 'w'))
+    print(params, file = open(original_params_path, 'w'))
+
+if transfer_layout:
+    desired_layouts = {'qnn.conv2d': ['NCHW', 'default'], 'nn.max_pool2d':['NCHW', 'default'], 'image.resize2d':['NCHW']}
+    seq = tvm.transform.Sequential([relay.transform.ConvertLayout(desired_layouts)]) #relay.transform.RemoveUnusedFunctions()
+    with tvm.transform.PassContext(opt_level = opt_level):
+        mod = seq(mod)
+
+if IR_output:
+    print(mod, file = open(converted_relay, 'w'))
+
+# set target information
+TARGET = 'llvm -device=arm_cpu -mtriple=aarch64-linux-gnu -mattr=+neon'
+EXECUTOR = Executor('graph') if executor_mode == 'graph' else Executor("aot")
+
+#autoScheduler tuning
+if use_autoScheduler:
+    tasks, task_weights = auto_scheduler.extract_tasks(mod["main"], params, TARGET)
+
+    for idx, task in enumerate(tasks):
+        print("========== Task %d  (workload key: %s) ==========" % (idx, task.workload_key))
+        print(task.compute_dag)
+
+    tuner = auto_scheduler.TaskScheduler(tasks, task_weights)
+    builder = auto_scheduler.LocalBuilder()
+    runner = auto_scheduler.RPCRunner(
+        key = device_key,
+        host = rpc_host,
+        port = rpc_port,
+        timeout = timeout,
+        number = number,
+        repeat = repeat, 
+        min_repeat_ms = min_repeat_ms,
+        enable_cpu_cache_flush=True
+    )
+    measure_callback = [auto_scheduler.RecordToFile(records_path)]
+    tune_option = auto_scheduler.TuningOptions(
+        num_measure_trials = trails,  # change this to 20000 to achieve the best performance
+        early_stopping = early_stopping,
+        builder = builder,
+        runner = runner,
+        measure_callbacks = measure_callback,
+    )
+    
+    if retune:
+        tuner.tune(tune_option)
+
+# compile relay to tir
+if use_autoScheduler:
+    with auto_scheduler.ApplyHistoryBest(records_path):
+        with transform.PassContext(
+            opt_level = opt_level, 
+            config = {'tir.disable_vectorize': True}, 
+            disabled_pass = ['AlterOpLayout']
+        ):
+            lib = relay.build(mod, target = TARGET, executor = EXECUTOR, params = params)
+else:
+    with transform.PassContext(
+        opt_level = opt_level, 
+        config = {'tir.disable_vectorize': True}, 
+        disabled_pass = ['AlterOpLayout']
+    ):
+        lib = relay.build(mod, target = TARGET, executor = EXECUTOR, params = params)
+
+# make C code file
+if output_c_code:
+    tvm.micro.export_model_library_format(lib, tar_file_path)
+    with tarfile.open(tar_file_path, 'r:*') as tar_f:
+        print('\n'.join(f' - {m.name}' for m in tar_f.getmembers()))
+
+#run and time testing-----------------------------------------------------------
+# Export library
+tmp = tempdir()
+filename = "net.tar"
+lib.export_library(tmp.relpath(filename))
+
+remote = auto_scheduler.utils.request_remote(
+    device_key = device_key,
+    host = rpc_host,
+    port = rpc_port
+)
+remote.upload(tmp.relpath(filename))
+rlib = remote.load_module(filename)
+
+dev = remote.cpu()
+module = graph_executor.GraphModule(rlib['default'](dev))
+
+dtype = 'int8'
+module.set_input(input_name, img_data)
+
+time_start = datetime.now()
+module.run()
+time_end = datetime.now() # 計算 graph_mod 的執行時間
+print('spent {0}', time_end - time_start)
+print('------------------------------TVM benchmark------------------------------')
+print(module.benchmark(dev, number = 100, repeat = 3))
+
+tvm_output = module.get_output(0).numpy()
+
+#post process--------------------------------------------------------------------
+post.post_process(tvm_output[0], output_path, img_path, img_name)
