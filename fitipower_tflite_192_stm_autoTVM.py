@@ -60,7 +60,7 @@ use_autoTVM = True
 retune = True
 number = 100
 repeat = 50
-trails = 1500
+trials = 1500
 early_stopping = 100
 min_repeat_ms = 0 # since we're tuning on a CPU, can be set to 0
 timeout = 100
@@ -158,7 +158,7 @@ if use_autoTVM:
         runner = runner
     )
     tuning_option = {
-        'trials': trails,
+        'trials': trials,
         'early_stopping': early_stopping,
         'measure_option': measure_option,
         'tuning_records': records_path,

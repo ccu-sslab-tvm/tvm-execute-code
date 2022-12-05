@@ -58,7 +58,7 @@ use_autoScheduler = False
 retune = False
 number = 100
 repeat = 50
-trails = 1500
+trials = 1500
 early_stopping = 100
 min_repeat_ms = 0 # since we're tuning on a CPU, can be set to 0
 timeout = 100
@@ -140,7 +140,7 @@ if use_autoScheduler:
     )
     measure_callback = [auto_scheduler.RecordToFile(records_path)]
     tune_option = auto_scheduler.TuningOptions(
-        num_measure_trials = trails,  # change this to 20000 to achieve the best performance
+        num_measure_trials = trials,  # change this to 20000 to achieve the best performance
         early_stopping = early_stopping,
         builder = builder,
         runner = runner,
@@ -148,6 +148,9 @@ if use_autoScheduler:
     )
     
     if retune:
+        if os.path.exists(records_path):
+            os.remove(records_path)
+
         tuner.tune(tune_option)
 
 # compile relay to tir
