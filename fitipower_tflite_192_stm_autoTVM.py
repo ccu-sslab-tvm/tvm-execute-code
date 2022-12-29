@@ -128,7 +128,7 @@ EXECUTOR = Executor('graph') if executor_mode == 'graph' else Executor("aot")
 
 #autoTVM tuning
 if use_autoTVM:
-    moduler_loader = tvm.micro.AutoTvmModuleLoader(
+    module_loader = tvm.micro.AutoTvmModuleLoader(
         template_project_dir = pathlib.Path(tvm.micro.get_microtvm_template_projects("zephyr" if use_board else 'crt')),
         project_options = {
             "zephyr_board": BOARD,
@@ -151,7 +151,7 @@ if use_autoTVM:
         timeout = timeout,
         min_repeat_ms = min_repeat_ms,
         enable_cpu_cache_flush = True,
-        module_loader = moduler_loader
+        module_loader = module_loader
     )
     measure_option = autotvm.measure_option(
         builder = builder, 
