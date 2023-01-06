@@ -18,6 +18,8 @@ import numpy
 import tvm
 from PIL import Image
 from tvm import auto_scheduler, relay, transform
+from tvm.auto_scheduler.task_scheduler import (LogEstimatedLatency,
+                                               PrintTableInfo)
 from tvm.contrib import graph_executor
 from tvm.relay.backend import Executor, Runtime
 
@@ -150,7 +152,11 @@ if use_autoScheduler:
         enable_cpu_cache_flush=True,
         module_loader = module_loader
     )
-    builder = auto_scheduler.LocalBuilder()
+    builder = auto_scheduler.LocalBuilder(
+        timeout = 10000,
+        build_func = tvm.micro.auto_scheduler_build_func,
+        runtime = RUNTIME
+    )
     runner = local_rpc.runner
     measure_callback = [auto_scheduler.RecordToFile(records_path)]
     tune_option = auto_scheduler.TuningOptions(
@@ -161,7 +167,7 @@ if use_autoScheduler:
         measure_callbacks = measure_callback,
     )
 
-    tuner = auto_scheduler.TaskScheduler(tasks, task_weights)
+    tuner = auto_scheduler.TaskScheduler(tasks, task_weights, callbacks=[PrintTableInfo(), LogEstimatedLatency(output_path + "/total_latency.tsv")])
     
     if retune:
         if os.path.exists(records_path):
