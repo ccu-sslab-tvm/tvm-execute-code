@@ -59,9 +59,9 @@ opt_level = 3
 # autoScheduler setting
 use_autoScheduler = True
 retune = True
-number = 2
-repeat = 3
-trials = 1500
+number = 10000
+repeat = 500
+trials = 100000
 early_stopping = 100
 min_repeat_ms = 0 # since we're tuning on a CPU, can be set to 0
 timeout = 100
