@@ -59,8 +59,8 @@ opt_level = 3
 # autoScheduler setting
 use_autoScheduler = True
 retune = True
-number = 100
-repeat = 50
+number = 2
+repeat = 3
 trials = 1500
 early_stopping = 100
 min_repeat_ms = 0 # since we're tuning on a CPU, can be set to 0
@@ -131,14 +131,14 @@ EXECUTOR = Executor('graph') if executor_mode == 'graph' else Executor("aot")
 
 #autoScheduler tuning
 if use_autoScheduler:
-    tasks, task_weights = auto_scheduler.extract_tasks(mod["main"], params, TARGET)
+    tasks, task_weights = auto_scheduler.extract_tasks(mod["main"], params, TARGET, opt_level=opt_level)
 
     for idx, task in enumerate(tasks):
         print("========== Task %d  (workload key: %s) ==========" % (idx, task.workload_key))
         print(task.compute_dag)
 
     module_loader = tvm.micro.AutoSchedulerModuleLoader(
-        template_project_dir = str(pathlib.Path(tvm.micro.get_microtvm_template_projects("zephyr"))),
+        template_project_dir = str(pathlib.Path(tvm.micro.get_microtvm_template_projects("zephyr" if use_board else 'crt'))),
         zephyr_board = BOARD,
         west_cmd = "west",
         verbose = False,
@@ -153,7 +153,7 @@ if use_autoScheduler:
         module_loader = module_loader
     )
     builder = auto_scheduler.LocalBuilder(
-        timeout = 10000,
+        disable_vectorize = True,
         build_func = tvm.micro.auto_scheduler_build_func,
         runtime = RUNTIME
     )
