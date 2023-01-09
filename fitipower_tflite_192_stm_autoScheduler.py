@@ -30,6 +30,7 @@ output_folder_path = './test_outputs'
 output_path = output_folder_path + '/fitipower_tflite_192_stm_autoScheduler'
 model_folder_path = './model'
 img_folder_path = './img/'
+tvm_temp_path = '/home/yang880519/tvm_temp' # Warning：This folder will be removed every time.
 
 # TVM IR output setting
 IR_output = True # Output relay & params or not
@@ -198,21 +199,41 @@ if output_c_code:
     with tarfile.open(tar_file_path, 'r:*') as tar_f:
         print('\n'.join(f' - {m.name}' for m in tar_f.getmembers()))
 
-# #run and time testing-----------------------------------------------------------
-# dev = tvm.device(TARGET, 0)
-# module = graph_executor.GraphModule(lib['default'](dev))
+# flash to board
+template_project = pathlib.Path(tvm.micro.get_microtvm_template_projects('zephyr' if use_board else 'crt'))
+project_options = {
+    'project_type': 'host_driven', 
+    'zephyr_board': BOARD
+} if use_board else {}
 
-# dtype = 'int8'
-# module.set_input(input_name, img_data)
+temp_dir = tvm.contrib.utils.tempdir(tvm_temp_path)
+generated_project_path = temp_dir / 'tvm_project'
+generated_project = tvm.micro.generate_project(
+    template_project, lib, generated_project_path, project_options
+)
+generated_project.build()
+generated_project.flash()
 
-# time_start = datetime.now()
-# module.run()
-# time_end = datetime.now() # 計算 graph_mod 的執行時間
-# print('spent {0}', time_end - time_start)
-# print('------------------------------TVM benchmark------------------------------')
-# print(module.benchmark(dev, number = 100, repeat = 3))
+# exucute on the board
+with tvm.micro.Session(transport_context_manager = generated_project.transport()) as session:
+    if executor_mode == 'graph':
+        executor = tvm.micro.create_local_debug_executor(
+            lib.get_graph_json(), session.get_system_lib(), session.device
+        )
+    elif executor_mode == 'aot':
+        executor = tvm.runtime.executor.aot_executor.AotModule(session.create_aot_executor())
 
-# tvm_output = module.get_output(0).numpy()
+    executor.set_input(
+        input_name, 
+        img_data, 
+        **lib.get_params()
+    )
 
-# #post process--------------------------------------------------------------------
-# post.post_process(tvm_output[0], output_path, img_path, img_name)
+    time_start = datetime.now()
+    executor.run()
+    time_end = datetime.now() # 計算 graph_mod 的執行時間
+    print("spent {0}", time_end - time_start)
+
+    tvm_output = executor.get_output(0).numpy()
+
+    post.post_process(tvm_output[0], output_path, img_path, img_name)
