@@ -119,8 +119,6 @@ if IR_output:
     print(mod, file = open(converted_relay, 'w'))
 
 # set target information
-# TARGET = 'llvm'
-# EXECUTOR = Executor('graph') if executor_mode == 'graph' else Executor("aot")
 boards_file = pathlib.Path(tvm.micro.get_microtvm_template_projects('zephyr')) / 'boards.json'
 with open(boards_file) as f:
     boards = json.load(f)
