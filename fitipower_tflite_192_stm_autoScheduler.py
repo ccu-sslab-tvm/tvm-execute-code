@@ -1,7 +1,7 @@
 '''
 使用模型： yolov5_704_p-0.9474_r-0.9408_map50-0.6404_192x192_ch1_ReLU-int8.tflite
 
-在電腦上執行，包含 autoScheduler 功能
+在 stm32f429 上執行，包含 autoScheduler 功能
 
 天鈺模型，已可以正確辨識天鈺的資料集
 
