@@ -26,6 +26,7 @@ output_folder_path = './test_outputs'
 output_path = output_folder_path + '/fitipower_tflite_192_x86_autoScheduler'
 model_folder_path = './model'
 img_folder_path = './img/'
+tvm_temp_path = '/home/yang880519/tvm_temp' # Warning：This folder will be removed every time.
 
 # TVM IR output setting
 IR_output = True # Output relay & params or not
@@ -169,7 +170,15 @@ if output_c_code:
 
 #run and time testing-----------------------------------------------------------
 dev = tvm.device(TARGET, 0)
-module = graph_executor.GraphModule(lib['default'](dev))
+
+if executor_mode == 'graph':
+    module = graph_executor.GraphModule(lib['default'](dev))
+elif  executor_mode == 'aot':
+    temp_dir = tvm.contrib.utils.tempdir(tvm_temp_path)
+    test_so_path = temp_dir / "test.so"
+    lib.export_library(test_so_path, cc="gcc", options=["-std=c11", "-g3", "-O0"])
+    loaded_mod = tvm.runtime.load_module(test_so_path)
+    module = tvm.runtime.executor.AotModule(loaded_mod['default'](dev))
 
 dtype = 'int8'
 module.set_input(input_name, img_data)
@@ -178,8 +187,9 @@ time_start = datetime.now()
 module.run()
 time_end = datetime.now() # 計算 graph_mod 的執行時間
 print('spent {0}', time_end - time_start)
-print('------------------------------TVM benchmark------------------------------')
-print(module.benchmark(dev, number = 100, repeat = 3))
+if executor_mode == 'graph': # AoT Mode 不支援 benchmark
+    print('------------------------------TVM benchmark------------------------------')
+    print(module.benchmark(dev, number = 100, repeat = 3))
 
 tvm_output = module.get_output(0).numpy()
 
