@@ -60,12 +60,12 @@ opt_level = 3
 # autoScheduler setting
 use_autoScheduler = True
 retune = True
-number = 10000
-repeat = 500
-trials = 100000
+number = 5
+repeat = 3
+trials = 20000
 early_stopping = 100
 min_repeat_ms = 0 # since we're tuning on a CPU, can be set to 0
-timeout = 100
+timeout = 120 # second, include compling time.
 records_path = output_path + '/autoScheduler.json'
 
 # make C code
@@ -215,7 +215,7 @@ generated_project.flash()
 # exucute on the board
 with tvm.micro.Session(transport_context_manager = generated_project.transport()) as session:
     if executor_mode == 'graph':
-        executor = tvm.micro.create_local_debug_executor(
+        executor = tvm.micro.create_local_graph_executor(
             lib.get_graph_json(), session.get_system_lib(), session.device
         )
     elif executor_mode == 'aot':
@@ -227,10 +227,12 @@ with tvm.micro.Session(transport_context_manager = generated_project.transport()
         **lib.get_params()
     )
 
-    time_start = datetime.now()
-    executor.run()
-    time_end = datetime.now() # 計算 graph_mod 的執行時間
-    print("spent {0}", time_end - time_start)
+    test_time = 5
+    for time in range(test_time):
+        time_start = datetime.now()
+        executor.run()
+        time_end = datetime.now() # 計算 graph_mod 的執行時間
+        print("{0}: spent {1}".format(time+1, time_end - time_start))
 
     tvm_output = executor.get_output(0).numpy()
 
