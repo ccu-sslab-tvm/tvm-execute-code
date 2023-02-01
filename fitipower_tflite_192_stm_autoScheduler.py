@@ -75,6 +75,9 @@ tar_file_path = output_path + '/c_code.tar'
 # executor mode
 executor_mode = 'graph' # 'graph' or 'aot'
 
+# runtime setting
+test_time = 100
+
 #------------------------------------------------------------------------------
 # make output folder
 if not os.path.exists(output_path):
@@ -227,12 +230,15 @@ with tvm.micro.Session(transport_context_manager = generated_project.transport()
         **lib.get_params()
     )
 
-    test_time = 5
+    total_time = datetime.min
     for time in range(test_time):
         time_start = datetime.now()
         executor.run()
         time_end = datetime.now() # 計算 graph_mod 的執行時間
-        print("{0}: spent {1}".format(time+1, time_end - time_start))
+        total_time += time_end - time_start
+        print("{0}. {1} -> {2}".format(time+1, time_end - time_start, total_time.hour*60*60 + total_time.minute*60 + total_time.second + (total_time.microsecond/1000000)))
+    avg_time = (total_time.hour*60*60 + total_time.minute*60 + total_time.second + (total_time.microsecond/1000000)) / test_time
+    print("avg spent {0}".format(avg_time))
 
     tvm_output = executor.get_output(0).numpy()
 
