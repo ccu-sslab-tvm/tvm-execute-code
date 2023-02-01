@@ -239,14 +239,14 @@ with tvm.micro.Session(transport_context_manager = generated_project.transport()
         **lib.get_params()
     )
 
-    total_time = datetime.min
+    total_time = 0.0
     for time in range(test_time):
-        time_start = datetime.now()
+        time_start = datetime.now().timestamp()
         executor.run()
-        time_end = datetime.now() # 計算 graph_mod 的執行時間
+        time_end = datetime.now().timestamp() # 計算 graph_mod 的執行時間
         total_time += time_end - time_start
-        print("{0}. {1} -> {2}".format(time+1, time_end - time_start, total_time.hour*60*60 + total_time.minute*60 + total_time.second + (total_time.microsecond/1000000)))
-    avg_time = (total_time.hour*60*60 + total_time.minute*60 + total_time.second + (total_time.microsecond/1000000)) / test_time
+        print("{0}. {1} -> {2}".format(time+1, time_end - time_start, total_time))
+    avg_time = total_time / test_time
     print("avg spent {0}".format(avg_time))
 
     tvm_output = executor.get_output(0).numpy()
