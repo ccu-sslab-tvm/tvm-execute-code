@@ -247,7 +247,7 @@ with tvm.micro.Session(transport_context_manager = generated_project.transport()
         total_time += time_end - time_start
         print("{0}. {1} -> {2}".format(time+1, time_end - time_start, total_time))
     avg_time = total_time / test_time
-    print("avg spent {0}".format(avg_time))
+    print("autoTVM use: {0}, avg spent {1}".format(use_autoTVM, avg_time))
 
     tvm_output = executor.get_output(0).numpy()
 
