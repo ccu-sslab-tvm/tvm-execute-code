@@ -25,58 +25,61 @@ from tvm.relay.backend import Executor, Runtime
 
 from post_process import post_process_fitipower as post
 
-# path setting
-output_folder_path = './test_outputs'
-output_path = output_folder_path + '/fitipower_tflite_192_stm_autoScheduler'
-model_folder_path = './model'
-img_folder_path = './img/'
-tvm_temp_path = '/home/yang880519/tvm_temp' # Warning：This folder will be removed every time.
-
-# TVM IR output setting
-IR_output = True # Output relay & params or not
-transfer_layout = True # 是否進行 layout 轉換
-original_relay_path = output_path + '/original_realy.txt'
-original_params_path = output_path + '/original_params.txt'
-converted_relay = output_path + '/converted_mod.txt'
-
-# board using setting
-use_board = True # Use board or the simulator
-simulator = 'qemu_x86'
-physical_hw = 'stm32f429i_disc1'
-
-# model using setting
-model_path = model_folder_path + '/yolov5_704_p-0.9474_r-0.9408_map50-0.6404_192x192_ch1_ReLU-int8.tflite'
+# model setting
+model_name = 'yolov5_704_p-0.9474_r-0.9408_map50-0.6404_192x192_ch1_ReLU-int8.tflite'
+size = 192
 input_name = 'input_1_int8'
-input_shape = (1, 192, 192, 1)
+input_shape = (1, size, size, 1)
 input_dtype = 'int8'
 
 # input image setting
 img_name = '202205051553337.jpeg'
-img_path = img_folder_path + img_name
 
-# optimize setting
-opt_level = 3
+# TVM IR output setting
+IR_output = True # Output relay & params or not
+transfer_layout = True # 是否進行 layout 轉換
 
-# autoScheduler setting
-use_autoScheduler = True
+# board using setting
+use_board = True # Use board or the simulator
+executor_mode = 'graph' # 'graph' or 'aot'
+test_time = 1
+
+# autoTVM setting
+use_autoScheduler = False
 retune = True
 number = 5
 repeat = 3
 trials = 20000
 early_stopping = 100
 min_repeat_ms = 0 # since we're tuning on a CPU, can be set to 0
-timeout = 120 # second, include compling time.
-records_path = output_path + '/autoScheduler.json'
+timeout = 120
+
+# optimize setting
+opt_level = 3
 
 # make C code
 output_c_code = True
+
+#------------------------------------------------------------------------------
+# path setting
+output_path = './test_outputs/fitipower_tflite_stm_autoScheduler_' + str(size)
+
+model_path = './model/' + model_name
+img_path = './img/' + img_name
+
+original_relay_path = output_path + '/original_realy.txt'
+original_params_path = output_path + '/original_params.txt'
+converted_relay = output_path + '/converted_mod.txt'
+
+records_path = output_path + '/autoScheduler.json'
+
 tar_file_path = output_path + '/c_code.tar'
 
-# executor mode
-executor_mode = 'graph' # 'graph' or 'aot'
+tvm_temp_path = '/home/yang880519/tvm_temp' # Warning：This folder will be removed every time.
 
-# runtime setting
-test_time = 100
+# board using setting
+simulator = 'qemu_x86'
+physical_hw = 'stm32f429i_disc1'
 
 #------------------------------------------------------------------------------
 # make output folder
