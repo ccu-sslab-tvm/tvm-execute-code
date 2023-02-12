@@ -5,6 +5,11 @@
 
 天鈺模型，已可以正確辨識天鈺的資料集
 
+--- problem ---
+新增 cmsis-nn 使用選擇，但 zephyr 若要支援 cmsis 則需要編譯 library 並提供路徑，目前還沒處理好
+因此 zephyr 無法支援 cmsis 的情況下無法使用 autoScheduler 進行 tuning
+--- problem ---
+
 目前已知問題： 無
 '''
 
@@ -21,6 +26,8 @@ from tvm import auto_scheduler, relay, transform
 from tvm.auto_scheduler.task_scheduler import (LogEstimatedLatency,
                                                PrintTableInfo)
 from tvm.contrib import graph_executor
+from tvm.driver.tvmc.composite_target import get_codegen_by_target
+from tvm.driver.tvmc.pass_config import parse_configs
 from tvm.relay.backend import Executor, Runtime
 
 from post_process import post_process_fitipower as post
@@ -38,10 +45,11 @@ img_name = '202205051553337.jpeg'
 # TVM IR output setting
 IR_output = True # Output relay & params or not
 transfer_layout = True # 是否進行 layout 轉換
+using_cmsis_nn = True
 
 # board using setting
 use_board = True # Use board or the simulator
-executor_mode = 'graph' # 'graph' or 'aot'
+executor_mode = 'aot' # 'graph' or 'aot'
 test_time = 1
 
 # autoTVM setting
@@ -70,6 +78,7 @@ img_path = './img/' + img_name
 original_relay_path = output_path + '/original_realy.txt'
 original_params_path = output_path + '/original_params.txt'
 converted_relay = output_path + '/converted_mod.txt'
+cmsis_nn_relay = output_path + '/cmsis_nn_mod.txt'
 
 records_path = output_path + '/autoScheduler.json'
 
@@ -115,6 +124,20 @@ if IR_output:
     print(mod, file = open(original_relay_path, 'w'))
     print(params, file = open(original_params_path, 'w'))
 
+if using_cmsis_nn:
+    config = parse_configs(None)
+    extra_targets = [{'name': 'cmsis-nn', 'opts': {'mcpu': 'cortex-m4'}, 'raw': 'cmsis-nn', 'is_tvm_target': False}]
+    for codegen_from_cli in extra_targets:
+            codegen = get_codegen_by_target(codegen_from_cli['name'])
+            partition_function = codegen['pass_pipeline']
+
+            if codegen['config_key'] is not None:
+                config[codegen['config_key']] = codegen_from_cli['opts']
+            with tvm.transform.PassContext(config=config):
+                mod = partition_function(mod, params, mod_name='default', **codegen_from_cli['opts'])
+    print(mod, file = open(cmsis_nn_relay, 'w'))
+
+
 if transfer_layout:
     desired_layouts = {'qnn.conv2d': ['NCHW', 'default'], 'nn.max_pool2d':['NCHW', 'default'], 'image.resize2d':['NCHW']}
     seq = tvm.transform.Sequential([relay.transform.ConvertLayout(desired_layouts)]) #relay.transform.RemoveUnusedFunctions()
@@ -132,22 +155,22 @@ with open(boards_file) as f:
 BOARD = physical_hw if use_board else simulator
 TARGET = tvm.target.target.micro(boards[BOARD]['model'] if use_board else 'host')
 RUNTIME = Runtime('crt', {'system-lib': True})
-EXECUTOR = Executor('graph') if executor_mode == 'graph' else Executor("aot")
+EXECUTOR = Executor('graph') if executor_mode == 'graph' else Executor('aot')
 
 #autoScheduler tuning
 if use_autoScheduler:
-    tasks, task_weights = auto_scheduler.extract_tasks(mod["main"], params, TARGET, opt_level=opt_level)
+    tasks, task_weights = auto_scheduler.extract_tasks(mod['main'], params, TARGET, opt_level=opt_level)
 
     for idx, task in enumerate(tasks):
-        print("========== Task %d  (workload key: %s) ==========" % (idx, task.workload_key))
+        print('========== Task %d  (workload key: %s) ==========' % (idx, task.workload_key))
         print(task.compute_dag)
 
     module_loader = tvm.micro.AutoSchedulerModuleLoader(
-        template_project_dir = str(pathlib.Path(tvm.micro.get_microtvm_template_projects("zephyr" if use_board else 'crt'))),
+        template_project_dir = str(pathlib.Path(tvm.micro.get_microtvm_template_projects('zephyr' if use_board else 'crt'))),
         zephyr_board = BOARD,
-        west_cmd = "west",
+        west_cmd = 'west',
         verbose = False,
-        project_type = "host_driven"
+        project_type = 'host_driven'
     )
     local_rpc = auto_scheduler.LocalRPCMeasureContext(
         number = number,
@@ -172,7 +195,7 @@ if use_autoScheduler:
         measure_callbacks = measure_callback,
     )
 
-    tuner = auto_scheduler.TaskScheduler(tasks, task_weights, callbacks=[PrintTableInfo(), LogEstimatedLatency(output_path + "/total_latency.tsv")])
+    tuner = auto_scheduler.TaskScheduler(tasks, task_weights, callbacks=[PrintTableInfo(), LogEstimatedLatency(output_path + '/total_latency.tsv')])
     
     if retune:
         if os.path.exists(records_path):
@@ -203,46 +226,47 @@ if output_c_code:
     with tarfile.open(tar_file_path, 'r:*') as tar_f:
         print('\n'.join(f' - {m.name}' for m in tar_f.getmembers()))
 
-# flash to board
-template_project = pathlib.Path(tvm.micro.get_microtvm_template_projects('zephyr' if use_board else 'crt'))
-project_options = {
-    'project_type': 'host_driven', 
-    'zephyr_board': BOARD
-} if use_board else {}
+if not using_cmsis_nn:
+    # flash to board
+    template_project = pathlib.Path(tvm.micro.get_microtvm_template_projects('zephyr' if use_board else 'crt'))
+    project_options = {
+        'project_type': 'host_driven', 
+        'zephyr_board': BOARD
+    } if use_board else {}
 
-temp_dir = tvm.contrib.utils.tempdir(tvm_temp_path)
-generated_project_path = temp_dir / 'tvm_project'
-generated_project = tvm.micro.generate_project(
-    template_project, lib, generated_project_path, project_options
-)
-generated_project.build()
-generated_project.flash()
-
-# exucute on the board
-with tvm.micro.Session(transport_context_manager = generated_project.transport()) as session:
-    if executor_mode == 'graph':
-        executor = tvm.micro.create_local_graph_executor(
-            lib.get_graph_json(), session.get_system_lib(), session.device
-        )
-    elif executor_mode == 'aot':
-        executor = tvm.runtime.executor.aot_executor.AotModule(session.create_aot_executor())
-
-    executor.set_input(
-        input_name, 
-        img_data, 
-        **lib.get_params()
+    temp_dir = tvm.contrib.utils.tempdir(tvm_temp_path)
+    generated_project_path = temp_dir / 'tvm_project'
+    generated_project = tvm.micro.generate_project(
+        template_project, lib, generated_project_path, project_options
     )
+    generated_project.build()
+    generated_project.flash()
 
-    total_time = 0.0
-    for time in range(test_time):
-        time_start = datetime.now().timestamp()
-        executor.run()
-        time_end = datetime.now().timestamp() # 計算 graph_mod 的執行時間
-        total_time += time_end - time_start
-        print("{0}. {1} -> {2}".format(time+1, time_end - time_start, total_time))
-    avg_time = total_time / test_time
-    print("autoScheduler use: {0}, avg spent {1}".format(use_autoScheduler, avg_time))
+    # exucute on the board
+    with tvm.micro.Session(transport_context_manager = generated_project.transport()) as session:
+        if executor_mode == 'graph':
+            executor = tvm.micro.create_local_graph_executor(
+                lib.get_graph_json(), session.get_system_lib(), session.device
+            )
+        elif executor_mode == 'aot':
+            executor = tvm.runtime.executor.aot_executor.AotModule(session.create_aot_executor())
 
-    tvm_output = executor.get_output(0).numpy()
+        executor.set_input(
+            input_name, 
+            img_data, 
+            **lib.get_params()
+        )
 
-    post.post_process(tvm_output[0], output_path, img_path, img_name)
+        total_time = 0.0
+        for time in range(test_time):
+            time_start = datetime.now().timestamp()
+            executor.run()
+            time_end = datetime.now().timestamp() # 計算 graph_mod 的執行時間
+            total_time += time_end - time_start
+            print('{0}. {1} -> {2}'.format(time+1, time_end - time_start, total_time))
+        avg_time = total_time / test_time
+        print('autoScheduler use: {0}, avg spent {1}'.format(use_autoScheduler, avg_time))
+
+        tvm_output = executor.get_output(0).numpy()
+
+        post.post_process(tvm_output[0], output_path, img_path, img_name)
