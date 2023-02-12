@@ -68,6 +68,9 @@ opt_level = 3
 # make C code
 output_c_code = True
 
+# Zephyr runtime setting
+zephyr_run = True
+
 #------------------------------------------------------------------------------
 # path setting
 output_path = './test_outputs/fitipower_tflite_stm_autoScheduler_' + str(size)
@@ -226,7 +229,7 @@ if output_c_code:
     with tarfile.open(tar_file_path, 'r:*') as tar_f:
         print('\n'.join(f' - {m.name}' for m in tar_f.getmembers()))
 
-if not using_cmsis_nn:
+if zephyr_run:
     # flash to board
     template_project = pathlib.Path(tvm.micro.get_microtvm_template_projects('zephyr' if use_board else 'crt'))
     project_options = {
