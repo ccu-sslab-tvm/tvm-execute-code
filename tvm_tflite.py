@@ -28,7 +28,7 @@ class Path:
 
     autoTVM_record = '/autoTVM@{0}@{1}.json' # layout, CMSIS
     autoScheduler_record = '/autoScheduler@{0}@{1}.json' # layout, CMSIS
-    autoScheduler_latency = 'total_latency.tsv'
+    autoScheduler_latency = '/total_latency.tsv'
 
     tar_file_path = '/c_code@{0}@{1}@{2}@{3}.tar' # tuner, executor_mode, layout, CMSIS
 
