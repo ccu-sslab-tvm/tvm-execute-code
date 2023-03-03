@@ -14,6 +14,7 @@ from tvm.driver.tvmc.composite_target import get_codegen_by_target
 from tvm.driver.tvmc.pass_config import parse_configs
 from tvm.relay.backend import Executor
 
+computer_target_list = {'llvm'}
 
 class Path:
     output_path = './test_outputs/fitipower@{0}' # model_name
@@ -26,15 +27,16 @@ class Path:
     converted_relay = '/converted_mod.txt'
     cmsis_nn_relay = '/cmsis_nn_mod.txt'
 
-    autoTVM_record = '/autoTVM@{0}@{1}.json' # layout, CMSIS
-    autoScheduler_record = '/autoScheduler@{0}@{1}.json' # layout, CMSIS
+    autoTVM_record = '/autoTVM@{0}@{1}@{2}.json' # target_name, layout, CMSIS
+    autoScheduler_record = '/autoScheduler@{0}@{1}@{2}.json' # target_name, layout, CMSIS
     autoScheduler_latency = '/total_latency.tsv'
 
-    tar_file_path = '/c_code@{0}@{1}@{2}@{3}.tar' # tuner, executor_mode, layout, CMSIS
+    tar_file_path = '/c_code@{0}@{1}@{2}@{3}@{4}.tar' # target_name, tuner, executor_mode, layout, CMSIS
 
     tvm_temp_path = '/home/yang880519/tvm_temp' # Warning：This folder will be removed every time.
 
 class TargetInfo:
+    target_name = None
     executor_mode = 'graph'
     
     target = None
@@ -51,24 +53,51 @@ def path_init(model_name:str, img_name:str, executor_mode:str, using_cmsis_nn:bo
     Path.converted_relay = Path.output_path + Path.converted_relay
     Path.cmsis_nn_relay = Path.output_path + Path.cmsis_nn_relay
 
-    Path.autoTVM_record = Path.output_path + Path.autoTVM_record.format('transLayout' if transfer_layout else 'oriLayout', 'CMSIS' if using_cmsis_nn else 'NoCMSIS')
-    Path.autoScheduler_record = Path.output_path + Path.autoScheduler_record.format('transLayout' if transfer_layout else 'oriLayout', 'CMSIS' if using_cmsis_nn else 'NoCMSIS')
+    Path.autoTVM_record = Path.output_path + Path.autoTVM_record.format(
+        TargetInfo.target_name, 
+        'transLayout' if transfer_layout else 'oriLayout', 
+        'CMSIS' if using_cmsis_nn else 'NoCMSIS'
+    )
+    Path.autoScheduler_record = Path.output_path + Path.autoScheduler_record.format(
+        TargetInfo.target_name, 
+        'transLayout' if transfer_layout else 'oriLayout', 
+        'CMSIS' if using_cmsis_nn else 'NoCMSIS'
+    )
     Path.autoScheduler_latency = Path.output_path + Path.autoScheduler_latency
 
     if use_autoTVM_log:
-        Path.tar_file_path = Path.output_path + Path.tar_file_path.format('autoTVM', executor_mode, 'transLayout' if transfer_layout else 'oriLayout', 'CMSIS' if using_cmsis_nn else 'NoCMSIS')
+        Path.tar_file_path = Path.output_path + Path.tar_file_path.format(
+            TargetInfo.target_name, 
+            'autoTVM', 
+            executor_mode, 
+            'transLayout' if transfer_layout else 'oriLayout', 
+            'CMSIS' if using_cmsis_nn else 'NoCMSIS'
+        )
     elif use_autoScheduler_log:
-        Path.tar_file_path = Path.output_path + Path.tar_file_path.format('autoScheduler', executor_mode, 'transLayout' if transfer_layout else 'oriLayout', 'CMSIS' if using_cmsis_nn else 'NoCMSIS')
+        Path.tar_file_path = Path.output_path + Path.tar_file_path.format(
+            TargetInfo.target_name, 
+            'autoScheduler', 
+            executor_mode, 
+            'transLayout' if transfer_layout else 'oriLayout', 
+            'CMSIS' if using_cmsis_nn else 'NoCMSIS'
+        )
     else:
-        Path.tar_file_path = Path.output_path + Path.tar_file_path.format('NoTuner', executor_mode, 'transLayout' if transfer_layout else 'oriLayout', 'CMSIS' if using_cmsis_nn else 'NoCMSIS')
+        Path.tar_file_path = Path.output_path + Path.tar_file_path.format(
+            TargetInfo.target_name, 
+            'NoTuner', 
+            executor_mode, 
+            'transLayout' if transfer_layout else 'oriLayout', 
+            'CMSIS' if using_cmsis_nn else 'NoCMSIS'
+        )
 
     if not os.path.exists(Path.output_path):
         os.mkdir(Path.output_path)
 
 def target_init(target, executor_mode):
+    TargetInfo.target_name = target
     TargetInfo.executor_mode = executor_mode
 
-    if target == 'llvm':
+    if target in computer_target_list:
         TargetInfo.target = target
     else:
         raise RuntimeError('{0} is an unknown target.'.format(target))
@@ -119,7 +148,7 @@ def model_init(input_name:str, input_shape:set, input_dtype:str, opt_level:int, 
 
     if transfer_layout:
         desired_layouts = {'qnn.conv2d': ['NCHW', 'default'], 'nn.max_pool2d':['NCHW', 'default'], 'image.resize2d':['NCHW']}
-        seq = transform.Sequential([relay.transform.ConvertLayout(desired_layouts)]) #relay.transform.RemoveUnusedFunctions()
+        seq = transform.Sequential([relay.transform.ConvertLayout(desired_layouts)])
         with transform.PassContext(opt_level = opt_level):
             mod = seq(mod)
 
@@ -138,9 +167,9 @@ def init(img_name:str, size:int,
     
     assert (use_autoTVM_log and use_autoScheduler_log) is not True, 'It can only use autoTVM or autoScheduler tuning log to compile at one time.'
 
-    path_init(model_name, img_name, executor_mode, using_cmsis_nn, transfer_layout, use_autoTVM_log, use_autoScheduler_log)
-
     target_init(target, executor_mode)
+
+    path_init(model_name, img_name, executor_mode, using_cmsis_nn, transfer_layout, use_autoTVM_log, use_autoScheduler_log)
 
     img_data = img_init(size)
 
@@ -189,8 +218,8 @@ def autoTVM(mod, params, trials, number, repeat, timeout, min_repeat_ms, early_s
             early_stopping = tuning_option['early_stopping'],
             measure_option = tuning_option['measure_option'],
             callbacks = [
-                tvm.autotvm.callback.progress_bar(tuning_option['trials'], prefix = prefix),
-                tvm.autotvm.callback.log_to_file(tuning_option['tuning_records']),
+                autotvm.callback.progress_bar(tuning_option['trials'], prefix = prefix),
+                autotvm.callback.log_to_file(tuning_option['tuning_records']),
             ],
         )
 
@@ -211,7 +240,7 @@ def autoScheduler(mod, params, trials, number, repeat, timeout, min_repeat_ms, e
     )
     measure_callback = [auto_scheduler.RecordToFile(Path.autoScheduler_record)]
     tune_option = auto_scheduler.TuningOptions(
-        num_measure_trials = trials,  # change this to 20000 to achieve the best performance
+        num_measure_trials = trials, 
         early_stopping = early_stopping,
         builder = builder,
         runner = runner,
