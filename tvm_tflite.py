@@ -1,4 +1,6 @@
+import json
 import os
+import pathlib
 import tarfile
 from datetime import datetime
 
@@ -12,9 +14,11 @@ from tvm.autotvm.tuner import XGBTuner
 from tvm.contrib import graph_executor
 from tvm.driver.tvmc.composite_target import get_codegen_by_target
 from tvm.driver.tvmc.pass_config import parse_configs
-from tvm.relay.backend import Executor
+from tvm.relay.backend import Executor, Runtime
 
 computer_target_list = {'llvm'}
+zephyr_qemu_list = {'qemu_x86'}
+zephyr_board_list = {'stm32f429i_disc1'}
 
 class Path:
     output_path = './test_outputs/fitipower@{0}' # model_name
@@ -40,6 +44,7 @@ class TargetInfo:
     executor_mode = 'graph'
     
     target = None
+    runtime = None
     executor = None
 
 def path_init(model_name:str, img_name:str, executor_mode:str, using_cmsis_nn:bool, transfer_layout:bool, use_autoTVM_log:bool, use_autoScheduler_log:bool):
@@ -99,6 +104,12 @@ def target_init(target, executor_mode):
 
     if target in computer_target_list:
         TargetInfo.target = target
+        TargetInfo.runtime = Runtime('cpp')
+    elif target in (zephyr_qemu_list | zephyr_board_list):
+        with open(pathlib.Path(tvm.micro.get_microtvm_template_projects('zephyr')) / 'boards.json') as f:
+            boards = json.load(f)
+        TargetInfo.target = tvm.target.target.micro(boards[target]['model'] if target in zephyr_board_list else  'host')
+        TargetInfo.runtime = Runtime('crt', {'system-lib': True})
     else:
         raise RuntimeError('{0} is an unknown target.'.format(target))
     
@@ -185,14 +196,41 @@ def init(img_name:str, size:int,
 
     return input_name, img_data, mod, params
 
-def autoTVM(mod, params, trials, number, repeat, timeout, min_repeat_ms, early_stopping):
-    builder = autotvm.LocalBuilder()
+def autoTVM_option(trials, number, repeat, timeout, min_repeat_ms, early_stopping):
+    if TargetInfo.target_name in computer_target_list:
+        builder = autotvm.LocalBuilder()
+    elif TargetInfo.target_name in (zephyr_qemu_list | zephyr_board_list):
+        module_loader = tvm.micro.AutoTvmModuleLoader(
+            template_project_dir = pathlib.Path(
+                tvm.micro.get_microtvm_template_projects(
+                    'zephyr' if TargetInfo.target_name in zephyr_board_list else 'crt'
+                )
+            ), 
+            project_options = {
+                'zephyr_board': TargetInfo.target_name,
+                'west_cmd': 'west',
+                'verbose': False,
+                'project_type': 'host_driven'
+            } if TargetInfo.target_name in zephyr_board_list else {
+                'verbose': False,
+            }
+        )
+        builder = autotvm.LocalBuilder(
+            build_kwargs = {'build_option': {'tir.disable_vectorize': True}},
+            do_fork = True,
+            build_func = tvm.micro.autotvm_build_func,
+            runtime = TargetInfo.runtime
+        )
+    else:
+        raise RuntimeError('AutoTVM setting failed, please check your target.')
+    
     runner = autotvm.LocalRunner(
         number = number,
         repeat = repeat,
         timeout = timeout,
         min_repeat_ms = min_repeat_ms,
         enable_cpu_cache_flush = True,
+        module_loader = module_loader if TargetInfo.target_name in (zephyr_qemu_list | zephyr_board_list) else None
     )
     measure_option = autotvm.measure_option(
         builder = builder, 
@@ -204,6 +242,11 @@ def autoTVM(mod, params, trials, number, repeat, timeout, min_repeat_ms, early_s
         'measure_option': measure_option,
         'tuning_records': Path.autoTVM_record,
     }
+    return tuning_option
+
+def autoTVM(mod, params, trials, number, repeat, timeout, min_repeat_ms, early_stopping):
+    tuning_option = autoTVM_option(trials, number, repeat, timeout, min_repeat_ms, early_stopping)
+
     if os.path.exists(tuning_option['tuning_records']):
         os.remove(tuning_option['tuning_records'])
 
@@ -223,43 +266,75 @@ def autoTVM(mod, params, trials, number, repeat, timeout, min_repeat_ms, early_s
             ],
         )
 
-def autoScheduler(mod, params, trials, number, repeat, timeout, min_repeat_ms, early_stopping):
-    tasks, task_weights = auto_scheduler.extract_tasks(mod["main"], params, TargetInfo.target)
+def autoScheduler_option(trials, number, repeat, timeout, min_repeat_ms, early_stopping):
+    if TargetInfo.target_name in computer_target_list:
+        builder = auto_scheduler.LocalBuilder()
+        runner = auto_scheduler.LocalRunner(
+            number = number,
+            repeat = repeat, 
+            timeout = timeout,
+            min_repeat_ms = min_repeat_ms,
+            enable_cpu_cache_flush=True
+        )
+    elif TargetInfo.target_name in zephyr_qemu_list:
+        raise RuntimeError('AutoScheduler module loader is not support qemulator target now.')
+    elif TargetInfo.target_name in zephyr_board_list:
+        module_loader = tvm.micro.AutoSchedulerModuleLoader(
+            template_project_dir = str(pathlib.Path(tvm.micro.get_microtvm_template_projects('zephyr'))),
+            zephyr_board = TargetInfo.target_name,
+            west_cmd = 'west',
+            verbose = False,
+            project_type = 'host_driven'
+        )
+        local_rpc = auto_scheduler.LocalRPCMeasureContext(
+            number = number,
+            repeat = repeat, 
+            timeout = timeout,
+            min_repeat_ms = min_repeat_ms,
+            enable_cpu_cache_flush=True,
+            module_loader = module_loader
+        )
+        builder = auto_scheduler.LocalBuilder(
+            timeout = timeout, 
+            disable_vectorize = True,
+            build_func = tvm.micro.auto_scheduler_build_func,
+            runtime = TargetInfo.runtime
+        )
+        runner = local_rpc.runner
+    else:
+        raise RuntimeError('AutoTVM setting failed, please check your target.')
+    
+    tuning_option = auto_scheduler.TuningOptions(
+        num_measure_trials = trials, 
+        early_stopping = early_stopping,
+        builder = builder,
+        runner = runner,
+        measure_callbacks = [auto_scheduler.RecordToFile(Path.autoScheduler_record)],
+    )
+    return local_rpc if 'local_rpc' in locals() else None, tuning_option
+
+def autoScheduler(mod, params, opt_level, trials, number, repeat, timeout, min_repeat_ms, early_stopping):
+    tasks, task_weights = auto_scheduler.extract_tasks(mod["main"], params, TargetInfo.target, opt_level=opt_level)
 
     for idx, task in enumerate(tasks):
         print("========== Task %d  (workload key: %s) ==========" % (idx, task.workload_key))
         print(task.compute_dag)
 
-    builder = auto_scheduler.LocalBuilder()
-    runner = auto_scheduler.LocalRunner(
-        number = number,
-        repeat = repeat, 
-        timeout = timeout,
-        min_repeat_ms = min_repeat_ms,
-        enable_cpu_cache_flush=True
-    )
-    measure_callback = [auto_scheduler.RecordToFile(Path.autoScheduler_record)]
-    tune_option = auto_scheduler.TuningOptions(
-        num_measure_trials = trials, 
-        early_stopping = early_stopping,
-        builder = builder,
-        runner = runner,
-        measure_callbacks = measure_callback,
-    )
+    _, tuning_option = autoScheduler_option(trials, number, repeat, timeout, min_repeat_ms, early_stopping)
 
     tuner = auto_scheduler.TaskScheduler(tasks, task_weights, callbacks=[PrintTableInfo(), LogEstimatedLatency(Path.autoScheduler_latency)])
 
     if os.path.exists(Path.autoScheduler_record):
         os.remove(Path.autoScheduler_record)
 
-    tuner.tune(tune_option)
+    tuner.tune(tuning_option)
 
-def tuning(tune_autoTVM, tune_autoScheduler, mod, params, trials, number, repeat, timeout, min_repeat_ms, early_stopping):
+def tuning(tune_autoTVM, tune_autoScheduler, mod, params, opt_level, trials, number, repeat, timeout, min_repeat_ms, early_stopping):
     if tune_autoTVM:
         autoTVM(mod, params, trials, number, repeat, timeout, min_repeat_ms, early_stopping)
 
     if tune_autoScheduler:
-        autoScheduler(mod, params, trials, number, repeat, timeout, min_repeat_ms, early_stopping)
+        autoScheduler(mod, params, opt_level, trials, number, repeat, timeout, min_repeat_ms, early_stopping)
 
 def compile(mod, params, opt_level:int, output_c_code:bool, use_autoTVM_log:bool, use_autoScheduler_log:bool):
     assert TargetInfo.target and TargetInfo.executor, 'Target and Executor can not be \'None\'.'
@@ -276,11 +351,14 @@ def compile(mod, params, opt_level:int, output_c_code:bool, use_autoTVM_log:bool
     with dispatch_context:
         with transform.PassContext(
             opt_level = opt_level, 
+            config = {'tir.disable_vectorize': True} if TargetInfo.target_name in (zephyr_qemu_list | zephyr_board_list) else None, 
+            disabled_pass = ['AlterOpLayout'] if TargetInfo.target_name in (zephyr_qemu_list | zephyr_board_list) else None
         ):
             lib = relay.build(
                 mod, 
                 target = TargetInfo.target, 
                 executor = TargetInfo.executor, 
+                runtime = TargetInfo.runtime, 
                 params = params
             )
 
@@ -292,7 +370,7 @@ def compile(mod, params, opt_level:int, output_c_code:bool, use_autoTVM_log:bool
     
     return lib
 
-def run(lib, input_name, img_data, test_time):
+def run_computer(lib, input_name, img_data, test_time):
     dev = tvm.device(TargetInfo.target, 0)
 
     if TargetInfo.executor_mode == 'graph':
@@ -318,3 +396,58 @@ def run(lib, input_name, img_data, test_time):
 
     tvm_output = executor.get_output(0).numpy()
     return tvm_output[0]
+
+def run_zephyr(lib, input_name, img_data, test_time):
+    # flash to board
+    template_project = pathlib.Path(
+        tvm.micro.get_microtvm_template_projects(
+            'zephyr' if TargetInfo.target_name in zephyr_board_list else 'crt'
+        )
+    )
+    project_options = {
+        'project_type': 'host_driven', 
+        'zephyr_board': TargetInfo.target_name
+    } if TargetInfo.target_name in zephyr_board_list else {}
+
+    temp_dir = tvm.contrib.utils.tempdir(Path.tvm_temp_path)
+    generated_project_path = temp_dir / 'tvm_project'
+    generated_project = tvm.micro.generate_project(
+        template_project, lib, generated_project_path, project_options
+    )
+    generated_project.build()
+    generated_project.flash()
+
+    with tvm.micro.Session(transport_context_manager = generated_project.transport()) as session:
+        if TargetInfo.executor_mode == 'graph':
+            executor = tvm.micro.create_local_graph_executor(
+                lib.get_graph_json(), session.get_system_lib(), session.device
+            )
+        elif TargetInfo.executor_mode == 'aot':
+            executor = tvm.runtime.executor.aot_executor.AotModule(session.create_aot_executor())
+
+        executor.set_input(
+            input_name, 
+            img_data, 
+            **lib.get_params()
+        )
+
+        total_time = 0.0
+        for time in range(test_time):
+            time_start = datetime.now().timestamp()
+            executor.run()
+            time_end = datetime.now().timestamp() # 計算 graph_mod 的執行時間
+            total_time += time_end - time_start
+            print('{0}. {1} -> {2}'.format(time+1, time_end - time_start, total_time))
+        avg_time = total_time / test_time
+        print('avg spent {0}'.format(avg_time))
+
+        tvm_output = executor.get_output(0).numpy()
+    return tvm_output[0]
+
+def run(lib, input_name, img_data, test_time):
+    if TargetInfo.target_name in computer_target_list:
+        return run_computer(lib, input_name, img_data, test_time)
+    elif TargetInfo.target_name in (zephyr_qemu_list | zephyr_board_list):
+        return run_zephyr(lib, input_name, img_data, test_time)
+    else:
+        raise RuntimeError('Run tvm failed, please check your target.')
