@@ -18,7 +18,7 @@ from tvm.relay.backend import Executor, Runtime
 
 computer_target_list = {'llvm'}
 zephyr_qemu_list = {'qemu_x86'}
-zephyr_board_list = {'stm32f429i_disc1'}
+zephyr_board_list = {'stm32f429i_disc1', 'nucleo_h743zi'}
 
 class Path:
     output_path = './test_outputs/fitipower@{0}' # model_name
@@ -108,7 +108,7 @@ def target_init(target, executor_mode):
     elif target in (zephyr_qemu_list | zephyr_board_list):
         with open(pathlib.Path(tvm.micro.get_microtvm_template_projects('zephyr')) / 'boards.json') as f:
             boards = json.load(f)
-        TargetInfo.target = tvm.target.target.micro(boards[target]['model'] if target in zephyr_board_list else  'host')
+        TargetInfo.target = tvm.target.target.micro(boards[target]['model'] if target in zephyr_board_list else 'host')
         TargetInfo.runtime = Runtime('crt', {'system-lib': True})
     else:
         raise RuntimeError('{0} is an unknown target.'.format(target))
