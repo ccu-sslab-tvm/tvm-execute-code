@@ -331,10 +331,21 @@ def autoScheduler(mod, params, opt_level, trials, number, repeat, timeout, min_r
 
 def tuning(tune_autoTVM, tune_autoScheduler, mod, params, opt_level, trials, number, repeat, timeout, min_repeat_ms, early_stopping):
     if tune_autoTVM:
-        autoTVM(mod, params, trials, number, repeat, timeout, min_repeat_ms, early_stopping)
+        try:
+            autoTVM(mod, params, trials, number, repeat, timeout, min_repeat_ms, early_stopping)
+        except:
+            print('autoTVM tuning failed')
+            if os.path.exists(Path.autoTVM_record):
+                os.remove(Path.autoTVM_record)
 
     if tune_autoScheduler:
-        autoScheduler(mod, params, opt_level, trials, number, repeat, timeout, min_repeat_ms, early_stopping)
+        try:
+            autoScheduler(mod, params, opt_level, trials, number, repeat, timeout, min_repeat_ms, early_stopping)
+        except:
+            print('autoScheduler tuning failed')
+            if os.path.exists(Path.autoScheduler_record):
+                os.remove(Path.autoScheduler_record)
+                os.remove(Path.autoScheduler_latency)
 
 def compile(mod, params, opt_level:int, output_c_code:bool, use_autoTVM_log:bool, use_autoScheduler_log:bool):
     assert TargetInfo.target and TargetInfo.executor, 'Target and Executor can not be \'None\'.'
