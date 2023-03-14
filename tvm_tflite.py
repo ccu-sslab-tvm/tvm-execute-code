@@ -333,16 +333,18 @@ def tuning(tune_autoTVM, tune_autoScheduler, mod, params, opt_level, trials, num
     if tune_autoTVM:
         try:
             autoTVM(mod, params, trials, number, repeat, timeout, min_repeat_ms, early_stopping)
-        except:
-            print('autoTVM tuning failed')
+        except Exception as e:
+            print('autoTVM tuning failed:')
+            print(e)
             if os.path.exists(Path.autoTVM_record):
                 os.remove(Path.autoTVM_record)
 
     if tune_autoScheduler:
         try:
             autoScheduler(mod, params, opt_level, trials, number, repeat, timeout, min_repeat_ms, early_stopping)
-        except:
-            print('autoScheduler tuning failed')
+        except Exception as e:
+            print('autoScheduler tuning failed:')
+            print(e)
             if os.path.exists(Path.autoScheduler_record):
                 os.remove(Path.autoScheduler_record)
                 os.remove(Path.autoScheduler_latency)
@@ -358,12 +360,17 @@ def compile(mod, params, opt_level:int, output_c_code:bool, use_autoTVM_log:bool
         dispatch_context = auto_scheduler.ApplyHistoryBest(Path.autoScheduler_record)
     else:
         dispatch_context = autotvm.DispatchContext.current
+    
+    config = {}
+    if TargetInfo.target_name in (zephyr_qemu_list | zephyr_board_list):
+        config['tir.disable_vectorize'] = True
+    if use_autoScheduler_log:
+        config['relay.backend.use_auto_scheduler'] = True
 
     with dispatch_context:
         with transform.PassContext(
             opt_level = opt_level, 
-            config = {'tir.disable_vectorize': True} if TargetInfo.target_name in (zephyr_qemu_list | zephyr_board_list) else None, 
-            disabled_pass = ['AlterOpLayout'] if TargetInfo.target_name in (zephyr_qemu_list | zephyr_board_list) else None
+            config = config, 
         ):
             lib = relay.build(
                 mod, 
