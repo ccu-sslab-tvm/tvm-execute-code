@@ -31,8 +31,8 @@ class Path:
     converted_relay = '/converted_mod.txt'
     cmsis_nn_relay = '/cmsis_nn_mod.txt'
 
-    autoTVM_record = '/autoTVM@{0}@{1}@{2}.json' # target_name, layout, CMSIS
-    autoScheduler_record = '/autoScheduler@{0}@{1}@{2}.json' # target_name, layout, CMSIS
+    autoTVM_record = '/autoTVM@{0}@{1}@{2}@{3}.json' # target_name, layout, executor_mode, CMSIS
+    autoScheduler_record = '/autoScheduler@{0}@{1}@{2}@{3}.json' # target_name, layout, executor_mode, CMSIS
     autoScheduler_latency = '/total_latency.tsv'
 
     tar_file_path = '/c_code@{0}@{1}@{2}@{3}@{4}.tar' # target_name, tuner, executor_mode, layout, CMSIS
@@ -47,7 +47,7 @@ class TargetInfo:
     runtime = None
     executor = None
 
-def path_init(model_name:str, img_name:str, executor_mode:str, using_cmsis_nn:bool, transfer_layout:bool, use_autoTVM_log:bool, use_autoScheduler_log:bool):
+def path_init(model_name:str, img_name:str, using_cmsis_nn:bool, transfer_layout:bool, use_autoTVM_log:bool, use_autoScheduler_log:bool):
     Path.output_path = Path.output_path.format(model_name)
 
     Path.model_path = Path.model_path.format(model_name)
@@ -61,11 +61,13 @@ def path_init(model_name:str, img_name:str, executor_mode:str, using_cmsis_nn:bo
     Path.autoTVM_record = Path.output_path + Path.autoTVM_record.format(
         TargetInfo.target_name, 
         'transLayout' if transfer_layout else 'oriLayout', 
+        TargetInfo.executor_mode, 
         'CMSIS' if using_cmsis_nn else 'NoCMSIS'
     )
     Path.autoScheduler_record = Path.output_path + Path.autoScheduler_record.format(
         TargetInfo.target_name, 
         'transLayout' if transfer_layout else 'oriLayout', 
+        TargetInfo.executor_mode, 
         'CMSIS' if using_cmsis_nn else 'NoCMSIS'
     )
     Path.autoScheduler_latency = Path.output_path + Path.autoScheduler_latency
@@ -74,7 +76,7 @@ def path_init(model_name:str, img_name:str, executor_mode:str, using_cmsis_nn:bo
         Path.tar_file_path = Path.output_path + Path.tar_file_path.format(
             TargetInfo.target_name, 
             'autoTVM', 
-            executor_mode, 
+            TargetInfo.executor_mode, 
             'transLayout' if transfer_layout else 'oriLayout', 
             'CMSIS' if using_cmsis_nn else 'NoCMSIS'
         )
@@ -82,7 +84,7 @@ def path_init(model_name:str, img_name:str, executor_mode:str, using_cmsis_nn:bo
         Path.tar_file_path = Path.output_path + Path.tar_file_path.format(
             TargetInfo.target_name, 
             'autoScheduler', 
-            executor_mode, 
+            TargetInfo.executor_mode, 
             'transLayout' if transfer_layout else 'oriLayout', 
             'CMSIS' if using_cmsis_nn else 'NoCMSIS'
         )
@@ -90,7 +92,7 @@ def path_init(model_name:str, img_name:str, executor_mode:str, using_cmsis_nn:bo
         Path.tar_file_path = Path.output_path + Path.tar_file_path.format(
             TargetInfo.target_name, 
             'NoTuner', 
-            executor_mode, 
+            TargetInfo.executor_mode, 
             'transLayout' if transfer_layout else 'oriLayout', 
             'CMSIS' if using_cmsis_nn else 'NoCMSIS'
         )
@@ -180,7 +182,7 @@ def init(img_name:str, size:int,
 
     target_init(target, executor_mode)
 
-    path_init(model_name, img_name, executor_mode, using_cmsis_nn, transfer_layout, use_autoTVM_log, use_autoScheduler_log)
+    path_init(model_name, img_name, using_cmsis_nn, transfer_layout, use_autoTVM_log, use_autoScheduler_log)
 
     img_data = img_init(size)
 
