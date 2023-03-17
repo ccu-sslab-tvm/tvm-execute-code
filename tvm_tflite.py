@@ -349,6 +349,7 @@ def tuning(tune_autoTVM, tune_autoScheduler, mod, params, opt_level, trials, num
             print(e)
             if os.path.exists(Path.autoScheduler_record):
                 os.remove(Path.autoScheduler_record)
+            if os.path.exists(Path.autoScheduler_latency):
                 os.remove(Path.autoScheduler_latency)
 
 def compile(mod, params, opt_level:int, output_c_code:bool, use_autoTVM_log:bool, use_autoScheduler_log:bool):
