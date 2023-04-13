@@ -47,7 +47,7 @@ class TargetInfo:
     runtime = None
     executor = None
 
-def path_init(model_name:str, img_name:str, using_cmsis_nn:bool, transfer_layout:bool, use_autoTVM_log:bool, use_autoScheduler_log:bool):
+def path_init(model_name:str, img_name:str, use_cmsis_nn:bool, transfer_layout:bool, use_autoTVM_log:bool, use_autoScheduler_log:bool):
     Path.output_path = Path.output_path.format(model_name)
 
     Path.model_path = Path.model_path.format(model_name)
@@ -62,13 +62,13 @@ def path_init(model_name:str, img_name:str, using_cmsis_nn:bool, transfer_layout
         TargetInfo.target_name, 
         'transLayout' if transfer_layout else 'oriLayout', 
         TargetInfo.executor_mode, 
-        'CMSIS' if using_cmsis_nn else 'NoCMSIS'
+        'CMSIS' if use_cmsis_nn else 'NoCMSIS'
     )
     Path.autoScheduler_record = Path.output_path + Path.autoScheduler_record.format(
         TargetInfo.target_name, 
         'transLayout' if transfer_layout else 'oriLayout', 
         TargetInfo.executor_mode, 
-        'CMSIS' if using_cmsis_nn else 'NoCMSIS'
+        'CMSIS' if use_cmsis_nn else 'NoCMSIS'
     )
     Path.autoScheduler_latency = Path.output_path + Path.autoScheduler_latency
 
@@ -78,7 +78,7 @@ def path_init(model_name:str, img_name:str, using_cmsis_nn:bool, transfer_layout
             'autoTVM', 
             TargetInfo.executor_mode, 
             'transLayout' if transfer_layout else 'oriLayout', 
-            'CMSIS' if using_cmsis_nn else 'NoCMSIS'
+            'CMSIS' if use_cmsis_nn else 'NoCMSIS'
         )
     elif use_autoScheduler_log:
         Path.tar_file_path = Path.output_path + Path.tar_file_path.format(
@@ -86,7 +86,7 @@ def path_init(model_name:str, img_name:str, using_cmsis_nn:bool, transfer_layout
             'autoScheduler', 
             TargetInfo.executor_mode, 
             'transLayout' if transfer_layout else 'oriLayout', 
-            'CMSIS' if using_cmsis_nn else 'NoCMSIS'
+            'CMSIS' if use_cmsis_nn else 'NoCMSIS'
         )
     else:
         Path.tar_file_path = Path.output_path + Path.tar_file_path.format(
@@ -94,7 +94,7 @@ def path_init(model_name:str, img_name:str, using_cmsis_nn:bool, transfer_layout
             'NoTuner', 
             TargetInfo.executor_mode, 
             'transLayout' if transfer_layout else 'oriLayout', 
-            'CMSIS' if using_cmsis_nn else 'NoCMSIS'
+            'CMSIS' if use_cmsis_nn else 'NoCMSIS'
         )
 
     if not os.path.exists(Path.output_path):
@@ -124,7 +124,7 @@ def img_init(size:int):
     img_data = numpy.expand_dims(img_data, axis = (0, -1)).astype('int8')
     return img_data
 
-def model_init(input_name:str, input_shape:set, input_dtype:str, opt_level:int, using_cmsis_nn:bool, transfer_layout:bool, IR_output:bool):
+def model_init(input_name:str, input_shape:set, input_dtype:str, opt_level:int, use_cmsis_nn:bool, transfer_layout:bool, IR_output:bool):
     model_buffer = open(Path.model_path, 'rb').read()
 
     try:
@@ -144,7 +144,7 @@ def model_init(input_name:str, input_shape:set, input_dtype:str, opt_level:int, 
         print(mod, file = open(Path.original_relay_path, 'w'))
         print(params, file = open(Path.original_params_path, 'w'))
 
-    if using_cmsis_nn:
+    if use_cmsis_nn:
         config = parse_configs(None)
         extra_targets = [{'name': 'cmsis-nn', 'opts': {'mcpu': 'cortex-m4'}, 'raw': 'cmsis-nn', 'is_tvm_target': False}]
         for codegen_from_cli in extra_targets:
@@ -172,7 +172,7 @@ def model_init(input_name:str, input_shape:set, input_dtype:str, opt_level:int, 
 
 def init(img_name:str, size:int, 
          model_name:str, input_name:str, input_shape:set, input_dtype:str, 
-         target:str, executor_mode:str, opt_level:int, using_cmsis_nn:bool, transfer_layout:bool, IR_output:bool, 
+         target:str, executor_mode:str, opt_level:int, use_cmsis_nn:bool, transfer_layout:bool, IR_output:bool, 
          use_autoTVM_log:bool, use_autoScheduler_log:bool):
 
     if executor_mode == 'aot':
@@ -182,7 +182,7 @@ def init(img_name:str, size:int,
 
     target_init(target, executor_mode)
 
-    path_init(model_name, img_name, using_cmsis_nn, transfer_layout, use_autoTVM_log, use_autoScheduler_log)
+    path_init(model_name, img_name, use_cmsis_nn, transfer_layout, use_autoTVM_log, use_autoScheduler_log)
 
     img_data = img_init(size)
 
@@ -191,7 +191,7 @@ def init(img_name:str, size:int,
         input_shape, 
         input_dtype, 
         opt_level, 
-        using_cmsis_nn, 
+        use_cmsis_nn, 
         transfer_layout, 
         IR_output
     )
