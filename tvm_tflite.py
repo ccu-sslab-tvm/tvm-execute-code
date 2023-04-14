@@ -15,6 +15,7 @@ from tvm.contrib import graph_executor
 from tvm.driver.tvmc.composite_target import get_codegen_by_target
 from tvm.driver.tvmc.pass_config import parse_configs
 from tvm.relay.backend import Executor, Runtime
+from tvm.relay.op.contrib import cmsisnn
 
 computer_target_list = {'llvm'}
 zephyr_qemu_list = {'qemu_x86'}
@@ -145,16 +146,10 @@ def model_init(input_name:str, input_shape:set, input_dtype:str, opt_level:int, 
         print(params, file = open(Path.original_params_path, 'w'))
 
     if use_cmsis_nn:
-        config = parse_configs(None)
-        extra_targets = [{'name': 'cmsis-nn', 'opts': {'mcpu': 'cortex-m4'}, 'raw': 'cmsis-nn', 'is_tvm_target': False}]
-        for codegen_from_cli in extra_targets:
-                codegen = get_codegen_by_target(codegen_from_cli['name'])
-                partition_function = codegen['pass_pipeline']
-
-                if codegen['config_key'] is not None:
-                    config[codegen['config_key']] = codegen_from_cli['opts']
-                with transform.PassContext(config=config):
-                    mod = partition_function(mod, params, mod_name='default', **codegen_from_cli['opts'])
+        config = {'tir.disable_vectorize': True}
+        config['relay.ext.cmsisnn.options'] = {'mcpu': TargetInfo.target.mcpu}
+        with transform.PassContext(config=config):
+            mod = cmsisnn.partition_for_cmsisnn(mod, params, mcpu=TargetInfo.target.mcpu)
     
         if IR_output:
             print(mod, file = open(Path.cmsis_nn_relay, 'w'))
@@ -256,7 +251,7 @@ def autoTVM(mod, params, trials, number, repeat, timeout, min_repeat_ms, early_s
     assert len(tasks) > 0, 'No task for autoTVM tuning, please check your model.'
 
     for i, task in enumerate(tasks):
-        prefix = '[%s][Task: %2d/%2d] ' % (str(datetime.now().strftime("%Y/%m/%d %H:%M:%S")), i + 1, len(tasks))
+        prefix = '[%s][Task: %2d/%2d] ' % (str(datetime.now().strftime('%Y/%m/%d %H:%M:%S')), i + 1, len(tasks))
         tuner_obj = XGBTuner(task, loss_type = 'rank')
         tuner_obj.tune(
             n_trial = min(tuning_option['trials'], len(task.config_space)),
@@ -316,10 +311,10 @@ def autoScheduler_option(trials, number, repeat, timeout, min_repeat_ms, early_s
     return local_rpc if 'local_rpc' in locals() else None, tuning_option
 
 def autoScheduler(mod, params, opt_level, trials, number, repeat, timeout, min_repeat_ms, early_stopping):
-    tasks, task_weights = auto_scheduler.extract_tasks(mod["main"], params, TargetInfo.target, opt_level=opt_level)
+    tasks, task_weights = auto_scheduler.extract_tasks(mod['main'], params, TargetInfo.target, opt_level=opt_level)
 
     for idx, task in enumerate(tasks):
-        print("========== Task %d  (workload key: %s) ==========" % (idx, task.workload_key))
+        print('========== Task %d  (workload key: %s) ==========' % (idx, task.workload_key))
         print(task.compute_dag)
 
     _, tuning_option = autoScheduler_option(trials, number, repeat, timeout, min_repeat_ms, early_stopping)
@@ -427,7 +422,7 @@ def run_zephyr(lib, input_name, img_data, test_time):
     )
     project_options = {
         'project_type': 'host_driven', 
-        'zephyr_board': TargetInfo.target_name
+        'zephyr_board': TargetInfo.target_name, 
     } if TargetInfo.target_name in zephyr_board_list else {}
 
     temp_dir = tvm.contrib.utils.tempdir(Path.tvm_temp_path)
