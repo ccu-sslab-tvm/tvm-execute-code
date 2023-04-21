@@ -12,7 +12,7 @@ input_dtype = ''
 img_name = ''
 
 # TVM IR output setting
-using_cmsis_nn = False # 基本常關
+use_cmsis_nn = False # 基本常關
 transfer_layout = False # 是否進行 layout 轉換
 IR_output = True # Output relay & params or not
 
@@ -57,7 +57,7 @@ if __name__ == "__main__":
         target, 
         executor_mode, 
         opt_level, 
-        using_cmsis_nn, 
+        use_cmsis_nn, 
         transfer_layout, 
         IR_output, 
         use_autoTVM_log, 
