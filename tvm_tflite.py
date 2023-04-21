@@ -116,7 +116,13 @@ def target_init(target, executor_mode):
     else:
         raise RuntimeError('{0} is an unknown target.'.format(target))
     
-    TargetInfo.executor = Executor(executor_mode)
+    if executor_mode == 'graph':
+        TargetInfo.executor = Executor('graph')
+    elif executor_mode == 'aot':
+        TargetInfo.executor = Executor("aot", {"unpacked-api": True, "interface-api": "c"})
+    else:
+        raise RuntimeError('Unknown Executor')
+
 
 def img_init(size:int):
     img_data = cv2.imread(Path.img_path, cv2.IMREAD_GRAYSCALE)
@@ -146,13 +152,16 @@ def model_init(input_name:str, input_shape:set, input_dtype:str, opt_level:int, 
         print(params, file = open(Path.original_params_path, 'w'))
 
     if use_cmsis_nn:
-        config = {'tir.disable_vectorize': True}
-        config['relay.ext.cmsisnn.options'] = {'mcpu': TargetInfo.target.mcpu}
-        with transform.PassContext(config=config):
-            mod = cmsisnn.partition_for_cmsisnn(mod, params, mcpu=TargetInfo.target.mcpu)
-    
-        if IR_output:
-            print(mod, file = open(Path.cmsis_nn_relay, 'w'))
+        if TargetInfo.target_name in (zephyr_qemu_list | zephyr_board_list):
+            config = {'tir.disable_vectorize': True}
+            config['relay.ext.cmsisnn.options'] = {'mcpu': TargetInfo.target.mcpu}
+            with transform.PassContext(config=config):
+                mod = cmsisnn.partition_for_cmsisnn(mod, params, mcpu=TargetInfo.target.mcpu)
+        
+            if IR_output:
+                print(mod, file = open(Path.cmsis_nn_relay, 'w'))
+        else:
+            raise RuntimeError(f'{TargetInfo.target_name} is not supported CMSIS-NN library')
 
     if transfer_layout:
         desired_layouts = {'qnn.conv2d': ['NCHW', 'default'], 'nn.max_pool2d':['NCHW', 'default'], 'image.resize2d':['NCHW']}
@@ -421,7 +430,7 @@ def run_zephyr(lib, input_name, img_data, test_time):
         )
     )
     project_options = {
-        'project_type': 'host_driven', 
+        'project_type': 'host_driven', #host_driven, aot_standalone_demo
         'zephyr_board': TargetInfo.target_name, 
     } if TargetInfo.target_name in zephyr_board_list else {}
 
