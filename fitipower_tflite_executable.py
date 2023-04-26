@@ -38,6 +38,7 @@ use_autoScheduler_log = False
 
 # make C code
 output_c_code = False
+for_CubeIDE = False
 
 # image process setting
 dequantance = [0, 0]
@@ -62,6 +63,7 @@ if __name__ == "__main__":
         IR_output, 
         use_autoTVM_log, 
         use_autoScheduler_log, 
+        for_CubeIDE, 
     )
 
     tvm.tuning(
@@ -87,21 +89,22 @@ if __name__ == "__main__":
         use_autoScheduler_log, 
     )
 
-    output = tvm.run(
-        lib, 
-        input_name, 
-        img_data, 
-        test_time, 
-    )
+    if not for_CubeIDE:
+        output = tvm.run(
+            lib, 
+            input_name, 
+            img_data, 
+            test_time, 
+        )
 
-    post.post_process(
-        output, 
-        tvm.Path.output_path, 
-        tvm.Path.img_path, 
-        img_name, 
-        size, 
-        dequantance, 
-        candidate, 
-        class_num, 
-        class_label, 
-    )
+        post.post_process(
+            output, 
+            tvm.Path.output_path, 
+            tvm.Path.img_path, 
+            img_name, 
+            size, 
+            dequantance, 
+            candidate, 
+            class_num, 
+            class_label, 
+        )

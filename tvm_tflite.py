@@ -32,6 +32,9 @@ class Path:
     converted_relay = '/converted_mod.txt'
     cmsis_nn_relay = '/cmsis_nn_mod.txt'
 
+    str_graph_json_path = '/graph_json.h'
+    str_rawDara_path = '/rawData.h'
+
     autoTVM_record = '/autoTVM@{0}@{1}@{2}@{3}.json' # target_name, layout, executor_mode, CMSIS
     autoScheduler_record = '/autoScheduler@{0}@{1}@{2}@{3}.json' # target_name, layout, executor_mode, CMSIS
     autoScheduler_latency = '/total_latency.tsv'
@@ -58,6 +61,9 @@ def path_init(model_name:str, img_name:str, use_cmsis_nn:bool, transfer_layout:b
     Path.original_params_path = Path.output_path + Path.original_params_path
     Path.converted_relay = Path.output_path + Path.converted_relay
     Path.cmsis_nn_relay = Path.output_path + Path.cmsis_nn_relay
+
+    Path.str_graph_json_path = Path.output_path + Path.str_graph_json_path
+    Path.str_rawDara_path = Path.output_path + Path.str_rawDara_path
 
     Path.autoTVM_record = Path.output_path + Path.autoTVM_record.format(
         TargetInfo.target_name, 
@@ -101,7 +107,7 @@ def path_init(model_name:str, img_name:str, use_cmsis_nn:bool, transfer_layout:b
     if not os.path.exists(Path.output_path):
         os.mkdir(Path.output_path)
 
-def target_init(target, executor_mode):
+def target_init(target, executor_mode, for_CubeIDE):
     TargetInfo.target_name = target
     TargetInfo.executor_mode = executor_mode
 
@@ -117,9 +123,9 @@ def target_init(target, executor_mode):
         raise RuntimeError('{0} is an unknown target.'.format(target))
     
     if executor_mode == 'graph':
-        TargetInfo.executor = Executor('graph')
+        TargetInfo.executor = Executor('graph', {"link-params": True})
     elif executor_mode == 'aot':
-        TargetInfo.executor = Executor("aot", {"unpacked-api": True, "interface-api": "c"})
+        TargetInfo.executor = Executor("aot", {"unpacked-api": True, "interface-api": "c"} if for_CubeIDE else None)
     else:
         raise RuntimeError('Unknown Executor')
 
@@ -129,6 +135,13 @@ def img_init(size:int):
     img_data = cv2.resize(img_data, (size, size))
     img_data = numpy.array(img_data) - 128 # 量化到 int8 空間
     img_data = numpy.expand_dims(img_data, axis = (0, -1)).astype('int8')
+
+    rawData = img_data.reshape(size*size)
+    str_rawDara = ''#str(img_data.reshape(size*size)).replace('  ', ', ')
+    for i in rawData:
+        str_rawDara += str(i) + ', '
+    print(rawData.__len__())
+    print('uint8_t raw_data[] = {' + str_rawDara + '};', file=open(Path.str_rawDara_path, 'w'))
     return img_data
 
 def model_init(input_name:str, input_shape:set, input_dtype:str, opt_level:int, use_cmsis_nn:bool, transfer_layout:bool, IR_output:bool):
@@ -177,14 +190,15 @@ def model_init(input_name:str, input_shape:set, input_dtype:str, opt_level:int, 
 def init(img_name:str, size:int, 
          model_name:str, input_name:str, input_shape:set, input_dtype:str, 
          target:str, executor_mode:str, opt_level:int, use_cmsis_nn:bool, transfer_layout:bool, IR_output:bool, 
-         use_autoTVM_log:bool, use_autoScheduler_log:bool):
+         use_autoTVM_log:bool, use_autoScheduler_log:bool, 
+         for_CubeIDE:bool):
 
     if executor_mode == 'aot':
         input_name = input_name.replace(':', '_')
     
     assert (use_autoTVM_log and use_autoScheduler_log) is not True, 'It can only use autoTVM or autoScheduler tuning log to compile at one time.'
 
-    target_init(target, executor_mode)
+    target_init(target, executor_mode, for_CubeIDE)
 
     path_init(model_name, img_name, use_cmsis_nn, transfer_layout, use_autoTVM_log, use_autoScheduler_log)
 
@@ -392,6 +406,9 @@ def compile(mod, params, opt_level:int, output_c_code:bool, use_autoTVM_log:bool
         tvm.micro.export_model_library_format(lib, Path.tar_file_path)
         with tarfile.open(Path.tar_file_path, 'r:*') as tar_f:
             print('\n'.join(f' - {m.name}' for m in tar_f.getmembers()))
+
+    str_graph_json = 'char* str_graph_json = ' + json.dumps(lib.get_graph_json()).replace('\\n', '').replace('  ', '') + ';'
+    print(str_graph_json, file=open(Path.str_graph_json_path, 'w'))
     
     return lib
 
