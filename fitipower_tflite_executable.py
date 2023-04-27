@@ -14,7 +14,7 @@ img_name = ''
 # TVM IR output setting
 use_cmsis_nn = False # 基本常關
 transfer_layout = False # 是否進行 layout 轉換
-IR_output = True # Output relay & params or not
+IR_output = False # Output relay & params or not
 
 # runtime setting
 target = 'llvm' # llvm, qemu_x86, stm32f429i_disc1, nucleo_h743zi
@@ -38,7 +38,6 @@ use_autoScheduler_log = False
 
 # make C code
 output_c_code = False
-for_CubeIDE = False
 
 # image process setting
 dequantance = [0, 0]
@@ -63,7 +62,7 @@ if __name__ == "__main__":
         IR_output, 
         use_autoTVM_log, 
         use_autoScheduler_log, 
-        for_CubeIDE, 
+        output_c_code, 
     )
 
     tvm.tuning(
@@ -89,7 +88,7 @@ if __name__ == "__main__":
         use_autoScheduler_log, 
     )
 
-    if not for_CubeIDE:
+    if not output_c_code:
         output = tvm.run(
             lib, 
             input_name, 
