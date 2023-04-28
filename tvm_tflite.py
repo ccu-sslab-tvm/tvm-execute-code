@@ -32,8 +32,7 @@ class Path:
     converted_relay = '/converted_mod.txt'
     cmsis_nn_relay = '/cmsis_nn_mod.txt'
 
-    str_graph_json_path = '/graph_json.h'
-    str_rawDara_path = '/rawData.h'
+    str_rawDara_path = '/rawData.c'
 
     autoTVM_record = '/autoTVM@{0}@{1}@{2}.json' # target_name, layout, CMSIS
     autoScheduler_record = '/autoScheduler@{0}@{1}@{2}.json' # target_name, layout, CMSIS
@@ -62,7 +61,6 @@ def path_init(model_name:str, img_name:str, use_cmsis_nn:bool, transfer_layout:b
     Path.converted_relay = Path.output_path + Path.converted_relay
     Path.cmsis_nn_relay = Path.output_path + Path.cmsis_nn_relay
 
-    Path.str_graph_json_path = Path.output_path + Path.str_graph_json_path
     Path.str_rawDara_path = Path.output_path + Path.str_rawDara_path
 
     Path.autoTVM_record = Path.output_path + Path.autoTVM_record.format(
@@ -116,7 +114,7 @@ def target_init(target, executor_mode, output_c_code):
         with open(pathlib.Path(tvm.micro.get_microtvm_template_projects('zephyr')) / 'boards.json') as f:
             boards = json.load(f)
         TargetInfo.target = tvm.target.target.micro(boards[target]['model'] if target in zephyr_board_list else 'host')
-        TargetInfo.runtime = Runtime('crt', {'system-lib': True})
+        TargetInfo.runtime = Runtime('crt', {} if output_c_code else {'system-lib': True})
     else:
         raise RuntimeError('{0} is an unknown target.'.format(target))
     
@@ -133,6 +131,17 @@ def img_init(size:int):
     img_data = cv2.resize(img_data, (size, size))
     img_data = numpy.array(img_data) - 128 # 量化到 int8 空間
     img_data = numpy.expand_dims(img_data, axis = (0, -1)).astype('int8')
+
+    rawData = img_data.reshape(size*size)
+    count = 0
+    str_rawDara = '\r\n\t'
+    for i in rawData:
+        str_rawDara += str(i) + ', '
+        if (count+1)%size == 0:
+            str_rawDara += '\r\n\t'
+        count += 1
+    print(rawData.__len__())
+    print('#include "main.h"\r\n\r\nconst uint8_t raw_data[] = {' + str_rawDara + '};', file=open(Path.str_rawDara_path, 'w'))
     return img_data
 
 def model_init(input_name:str, input_shape:set, input_dtype:str, opt_level:int, use_cmsis_nn:bool, transfer_layout:bool, IR_output:bool):
@@ -376,6 +385,9 @@ def compile(mod, params, opt_level:int, output_c_code:bool, use_autoTVM_log:bool
     config = {}
     if TargetInfo.target_name in (zephyr_qemu_list | zephyr_board_list):
         config['tir.disable_vectorize'] = True
+        config['tir.usmp.enable'] = True
+        config['tir.usmp.algorithm'] = 'hill_climb'
+        config['tir.disable_storage_rewrite'] = True
     if use_autoScheduler_log:
         config['relay.backend.use_auto_scheduler'] = True
 
