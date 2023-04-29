@@ -32,6 +32,7 @@ class Path:
     converted_relay = '/converted_mod.txt'
     cmsis_nn_relay = '/cmsis_nn_mod.txt'
 
+    str_graph_json_path = '/graph_json.h'
     str_rawDara_path = '/rawData.c'
 
     autoTVM_record = '/autoTVM@{0}@{1}@{2}.json' # target_name, layout, CMSIS
@@ -61,6 +62,7 @@ def path_init(model_name:str, img_name:str, use_cmsis_nn:bool, transfer_layout:b
     Path.converted_relay = Path.output_path + Path.converted_relay
     Path.cmsis_nn_relay = Path.output_path + Path.cmsis_nn_relay
 
+    Path.str_graph_json_path = Path.output_path + Path.str_graph_json_path
     Path.str_rawDara_path = Path.output_path + Path.str_rawDara_path
 
     Path.autoTVM_record = Path.output_path + Path.autoTVM_record.format(
@@ -114,7 +116,7 @@ def target_init(target, executor_mode, output_c_code):
         with open(pathlib.Path(tvm.micro.get_microtvm_template_projects('zephyr')) / 'boards.json') as f:
             boards = json.load(f)
         TargetInfo.target = tvm.target.target.micro(boards[target]['model'] if target in zephyr_board_list else 'host')
-        TargetInfo.runtime = Runtime('crt', {} if output_c_code else {'system-lib': True})
+        TargetInfo.runtime = Runtime('crt', {} if output_c_code and TargetInfo.executor_mode == 'aot' else {'system-lib': True})
     else:
         raise RuntimeError('{0} is an unknown target.'.format(target))
     
@@ -385,7 +387,7 @@ def compile(mod, params, opt_level:int, output_c_code:bool, use_autoTVM_log:bool
     config = {}
     if TargetInfo.target_name in (zephyr_qemu_list | zephyr_board_list):
         config['tir.disable_vectorize'] = True
-        if output_c_code:
+        if output_c_code and TargetInfo.executor_mode == 'aot':
             config['tir.usmp.enable'] = True
             config['tir.usmp.algorithm'] = 'hill_climb'
             config['tir.disable_storage_rewrite'] = True
@@ -410,6 +412,10 @@ def compile(mod, params, opt_level:int, output_c_code:bool, use_autoTVM_log:bool
         tvm.micro.export_model_library_format(lib, Path.tar_file_path)
         with tarfile.open(Path.tar_file_path, 'r:*') as tar_f:
             print('\n'.join(f' - {m.name}' for m in tar_f.getmembers()))
+
+        if TargetInfo.executor_mode == 'graph':
+            str_graph_json = 'char* str_graph_json = ' + json.dumps(lib.get_graph_json()).replace('\\n', '').replace('  ', '') + ';'
+            print(str_graph_json, file=open(Path.str_graph_json_path, 'w'))
     
     return lib
 
