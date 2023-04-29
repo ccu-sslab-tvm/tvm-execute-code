@@ -385,9 +385,10 @@ def compile(mod, params, opt_level:int, output_c_code:bool, use_autoTVM_log:bool
     config = {}
     if TargetInfo.target_name in (zephyr_qemu_list | zephyr_board_list):
         config['tir.disable_vectorize'] = True
-        config['tir.usmp.enable'] = True
-        config['tir.usmp.algorithm'] = 'hill_climb'
-        config['tir.disable_storage_rewrite'] = True
+        if output_c_code:
+            config['tir.usmp.enable'] = True
+            config['tir.usmp.algorithm'] = 'hill_climb'
+            config['tir.disable_storage_rewrite'] = True
     if use_autoScheduler_log:
         config['relay.backend.use_auto_scheduler'] = True
 
