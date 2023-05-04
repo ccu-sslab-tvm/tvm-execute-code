@@ -116,23 +116,30 @@ def target_init(target, executor_mode, output_c_code):
         with open(pathlib.Path(tvm.micro.get_microtvm_template_projects('zephyr')) / 'boards.json') as f:
             boards = json.load(f)
         TargetInfo.target = tvm.target.target.micro(boards[target]['model'] if target in zephyr_board_list else 'host')
-        TargetInfo.runtime = Runtime('crt', {} if output_c_code and TargetInfo.executor_mode == 'aot' else {'system-lib': True})
+        TargetInfo.runtime = Runtime('crt', {} if output_c_code and (executor_mode == 'aot') else {'system-lib': True})
     else:
         raise RuntimeError('{0} is an unknown target.'.format(target))
     
     if executor_mode == 'graph':
-        TargetInfo.executor = Executor('graph', {"link-params": True})
+        TargetInfo.executor = Executor('graph', {"link-params": True} if output_c_code else {})
     elif executor_mode == 'aot':
         TargetInfo.executor = Executor("aot", {"unpacked-api": True, "interface-api": "c"} if output_c_code else None)
     else:
         raise RuntimeError('Unknown Executor')
 
 
-def img_init(size:int):
-    img_data = cv2.imread(Path.img_path, cv2.IMREAD_GRAYSCALE)
-    img_data = cv2.resize(img_data, (size, size))
-    img_data = numpy.array(img_data) - 128 # 量化到 int8 空間
-    img_data = numpy.expand_dims(img_data, axis = (0, -1)).astype('int8')
+def img_init(size:int, input_dtype:str):
+    if input_dtype == 'int8':
+        img_data = cv2.imread(Path.img_path, cv2.IMREAD_GRAYSCALE)
+        img_data = cv2.resize(img_data, (size, size))
+        img_data = numpy.array(img_data) - 128 # 量化到 int8 空間
+        img_data = numpy.expand_dims(img_data, axis = (0, -1)).astype('int8')
+    elif input_dtype == 'float32':
+        img_data = cv2.imread(Path.img_path, cv2.IMREAD_GRAYSCALE)
+        img_data = cv2.resize(img_data, (size, size))
+        img_data = numpy.expand_dims(img_data, axis = (0, -1)) / 255
+    else:
+        raise RuntimeError("Unknow Input Type.")
 
     rawData = img_data.reshape(size*size)
     count = 0
@@ -143,7 +150,7 @@ def img_init(size:int):
             str_rawDara += '\r\n\t'
         count += 1
     print(rawData.__len__())
-    print('#include "main.h"\r\n\r\nconst uint8_t raw_data[] = {' + str_rawDara + '};', file=open(Path.str_rawDara_path, 'w'))
+    print('#include "main.h"\r\n\r\nuint8_t raw_data[] = {' + str_rawDara + '};', file=open(Path.str_rawDara_path, 'w'))
     return img_data
 
 def model_init(input_name:str, input_shape:set, input_dtype:str, opt_level:int, use_cmsis_nn:bool, transfer_layout:bool, IR_output:bool):
@@ -204,7 +211,7 @@ def init(img_name:str, size:int,
 
     path_init(model_name, img_name, use_cmsis_nn, transfer_layout, use_autoTVM_log, use_autoScheduler_log)
 
-    img_data = img_init(size)
+    img_data = img_init(size, input_dtype)
 
     mod, params = model_init(
         input_name, 
@@ -298,9 +305,7 @@ def autoScheduler_option(trials, number, repeat, timeout, min_repeat_ms, early_s
             min_repeat_ms = min_repeat_ms,
             enable_cpu_cache_flush=True
         )
-    elif TargetInfo.target_name in zephyr_qemu_list:
-        raise RuntimeError('AutoScheduler module loader is not support qemulator target now.')
-    elif TargetInfo.target_name in zephyr_board_list:
+    elif TargetInfo.target_name in (zephyr_qemu_list | zephyr_board_list):
         module_loader = tvm.micro.AutoSchedulerModuleLoader(
             template_project_dir = str(pathlib.Path(tvm.micro.get_microtvm_template_projects('zephyr'))),
             zephyr_board = TargetInfo.target_name,
@@ -324,7 +329,7 @@ def autoScheduler_option(trials, number, repeat, timeout, min_repeat_ms, early_s
         )
         runner = local_rpc.runner
     else:
-        raise RuntimeError('AutoTVM setting failed, please check your target.')
+        raise RuntimeError('AutoScheduler setting failed, please check your target.')
     
     tuning_option = auto_scheduler.TuningOptions(
         num_measure_trials = trials, 
