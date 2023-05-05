@@ -12,7 +12,7 @@ input_dtype = ''
 img_name = ''
 
 # TVM IR output setting
-use_cmsis_nn = False # 基本常關
+use_cmsis_nn = False # 是否啟用 CMSIS-NN Operator 轉換
 transfer_layout = False # 是否進行 layout 轉換
 IR_output = False # Output relay & params or not
 
@@ -32,9 +32,9 @@ min_repeat_ms = 0
 early_stopping = 100
 
 # tuner setting only for autoScheduler
-auto_scheduler_alpha = 0.05 #alpha
-auto_scheduler_beta = 0.5 #beta
-auto_scheduler_gamma = 0.5 #gamma
+auto_scheduler_alpha = 0.05
+auto_scheduler_beta = 0.5
+auto_scheduler_gamma = 0.5
 auto_scheduler_bws = 1 #backward_window_size
 
 # optimize setting
