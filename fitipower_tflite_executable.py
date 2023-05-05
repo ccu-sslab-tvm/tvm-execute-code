@@ -31,6 +31,12 @@ timeout = 120
 min_repeat_ms = 0
 early_stopping = 100
 
+# tuner setting only for autoScheduler
+auto_scheduler_alpha = 0.05 #alpha
+auto_scheduler_beta = 0.5 #beta
+auto_scheduler_gamma = 0.5 #gamma
+auto_scheduler_bws = 1 #backward_window_size
+
 # optimize setting
 opt_level = 3
 use_autoTVM_log = False
@@ -68,6 +74,7 @@ if __name__ == "__main__":
     tvm.tuning(
         tune_autoTVM, 
         tune_autoScheduler, 
+        output_c_code, 
         mod, 
         params, 
         opt_level, 
@@ -76,7 +83,11 @@ if __name__ == "__main__":
         repeat, 
         timeout, 
         min_repeat_ms, 
-        early_stopping
+        early_stopping, 
+        auto_scheduler_alpha, 
+        auto_scheduler_beta, 
+        auto_scheduler_gamma, 
+        auto_scheduler_bws
     )
 
     lib = tvm.compile(

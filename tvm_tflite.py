@@ -340,7 +340,11 @@ def autoScheduler_option(trials, number, repeat, timeout, min_repeat_ms, early_s
     )
     return local_rpc if 'local_rpc' in locals() else None, tuning_option
 
-def autoScheduler(mod, params, opt_level, trials, number, repeat, timeout, min_repeat_ms, early_stopping):
+def autoScheduler(
+        mod, params, 
+        opt_level, trials, number, repeat, timeout, min_repeat_ms, early_stopping, 
+        auto_scheduler_alpha, auto_scheduler_beta, auto_scheduler_gamma, auto_scheduler_bws
+    ):
     tasks, task_weights = auto_scheduler.extract_tasks(mod['main'], params, TargetInfo.target, opt_level=opt_level)
 
     for idx, task in enumerate(tasks):
@@ -349,33 +353,45 @@ def autoScheduler(mod, params, opt_level, trials, number, repeat, timeout, min_r
 
     _, tuning_option = autoScheduler_option(trials, number, repeat, timeout, min_repeat_ms, early_stopping)
 
-    tuner = auto_scheduler.TaskScheduler(tasks, task_weights, callbacks=[PrintTableInfo(), LogEstimatedLatency(Path.autoScheduler_latency)])
+    tuner = auto_scheduler.TaskScheduler(
+        tasks = tasks, 
+        task_weights = task_weights, 
+        alpha = auto_scheduler_alpha, 
+        beta = auto_scheduler_beta, 
+        gamma = auto_scheduler_gamma, 
+        backward_window_size = auto_scheduler_bws, 
+        callbacks = [PrintTableInfo(), LogEstimatedLatency(Path.autoScheduler_latency)]
+    )
 
     if os.path.exists(Path.autoScheduler_record):
         os.remove(Path.autoScheduler_record)
 
     tuner.tune(tuning_option)
 
-def tuning(tune_autoTVM, tune_autoScheduler, mod, params, opt_level, trials, number, repeat, timeout, min_repeat_ms, early_stopping):
+def tuning(
+        tune_autoTVM, tune_autoScheduler, output_c_code,  
+        mod, params, opt_level, 
+        trials, number, repeat, timeout, min_repeat_ms, early_stopping, 
+        auto_scheduler_alpha, auto_scheduler_beta, auto_scheduler_gamma, auto_scheduler_bws
+    ):
+    assert output_c_code == False, "Tuning uses Zephyr to test the execution time, please disable `output_c_code` to make it runnable."
+
     if tune_autoTVM:
         try:
             autoTVM(mod, params, trials, number, repeat, timeout, min_repeat_ms, early_stopping)
         except Exception as e:
             print('autoTVM tuning failed:')
             print(e)
-            if os.path.exists(Path.autoTVM_record):
-                os.remove(Path.autoTVM_record)
+            print('Please check if the autoTVM tuning log is usable.')
 
     if tune_autoScheduler:
         try:
-            autoScheduler(mod, params, opt_level, trials, number, repeat, timeout, min_repeat_ms, early_stopping)
+            autoScheduler(mod, params, opt_level, trials, number, repeat, timeout, min_repeat_ms, early_stopping, 
+                            auto_scheduler_alpha, auto_scheduler_beta, auto_scheduler_gamma, auto_scheduler_bws)
         except Exception as e:
             print('autoScheduler tuning failed:')
             print(e)
-            if os.path.exists(Path.autoScheduler_record):
-                os.remove(Path.autoScheduler_record)
-            if os.path.exists(Path.autoScheduler_latency):
-                os.remove(Path.autoScheduler_latency)
+            print('Please check if the autoScheduler tuning log is usable.')
 
 def compile(mod, params, opt_level:int, output_c_code:bool, use_autoTVM_log:bool, use_autoScheduler_log:bool):
     assert TargetInfo.target and TargetInfo.executor, 'Target and Executor can not be \'None\'.'
