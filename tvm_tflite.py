@@ -374,7 +374,7 @@ def tuning(
         trials, number, repeat, timeout, min_repeat_ms, early_stopping, 
         auto_scheduler_alpha, auto_scheduler_beta, auto_scheduler_gamma, auto_scheduler_bws
     ):
-    assert output_c_code == False, "Tuning uses Zephyr to test the execution time, please disable `output_c_code` to make it runnable."
+    assert ((tune_autoTVM or tune_autoScheduler) and output_c_code) == False, "Tuning uses Zephyr to test the execution time, please disable `output_c_code` to make it runnable."
 
     if tune_autoTVM:
         try:
