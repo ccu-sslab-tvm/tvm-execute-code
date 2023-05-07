@@ -24,6 +24,7 @@ test_time = 1
 # tuner setting
 tune_autoTVM = False
 tune_autoScheduler = False
+use_previous = True
 number = 5
 repeat = 3
 trials = 20000
@@ -74,6 +75,7 @@ if __name__ == "__main__":
     tvm.tuning(
         tune_autoTVM, 
         tune_autoScheduler, 
+        use_previous, 
         output_c_code, 
         mod, 
         params, 

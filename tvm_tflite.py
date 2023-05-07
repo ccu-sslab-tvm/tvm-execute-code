@@ -273,18 +273,21 @@ def autoTVM_option(trials, number, repeat, timeout, min_repeat_ms, early_stoppin
     }
     return tuning_option
 
-def autoTVM(mod, params, trials, number, repeat, timeout, min_repeat_ms, early_stopping):
+def autoTVM(mod, params, use_previous, trials, number, repeat, timeout, min_repeat_ms, early_stopping):
+    if os.path.exists(tuning_option['tuning_records']) and not use_previous:
+        os.remove(tuning_option['tuning_records'])
+
     tuning_option = autoTVM_option(trials, number, repeat, timeout, min_repeat_ms, early_stopping)
 
-    if os.path.exists(tuning_option['tuning_records']):
-        os.remove(tuning_option['tuning_records'])
+    tuner_obj = XGBTuner(task, loss_type = 'rank')
+    if use_previous:
+        tuner_obj.load_history(autotvm.record.load_from_file(Path.autoTVM_record))
 
     tasks = autotvm.task.extract_from_program(mod['main'], params = params, target = TargetInfo.target)
     assert len(tasks) > 0, 'No task for autoTVM tuning, please check your model.'
 
     for i, task in enumerate(tasks):
         prefix = '[%s][Task: %2d/%2d] ' % (str(datetime.now().strftime('%Y/%m/%d %H:%M:%S')), i + 1, len(tasks))
-        tuner_obj = XGBTuner(task, loss_type = 'rank')
         tuner_obj.tune(
             n_trial = min(tuning_option['trials'], len(task.config_space)),
             early_stopping = tuning_option['early_stopping'],
@@ -342,9 +345,13 @@ def autoScheduler_option(trials, number, repeat, timeout, min_repeat_ms, early_s
 
 def autoScheduler(
         mod, params, 
+        use_previous, 
         opt_level, trials, number, repeat, timeout, min_repeat_ms, early_stopping, 
         auto_scheduler_alpha, auto_scheduler_beta, auto_scheduler_gamma, auto_scheduler_bws
     ):
+    if os.path.exists(Path.autoScheduler_record) and not use_previous:
+        os.remove(Path.autoScheduler_record)
+
     tasks, task_weights = auto_scheduler.extract_tasks(mod['main'], params, TargetInfo.target, opt_level=opt_level)
 
     for idx, task in enumerate(tasks):
@@ -356,6 +363,7 @@ def autoScheduler(
     tuner = auto_scheduler.TaskScheduler(
         tasks = tasks, 
         task_weights = task_weights, 
+        load_log_file = Path.autoScheduler_record if use_previous else None, 
         alpha = auto_scheduler_alpha, 
         beta = auto_scheduler_beta, 
         gamma = auto_scheduler_gamma, 
@@ -363,13 +371,10 @@ def autoScheduler(
         callbacks = [PrintTableInfo(), LogEstimatedLatency(Path.autoScheduler_latency)]
     )
 
-    if os.path.exists(Path.autoScheduler_record):
-        os.remove(Path.autoScheduler_record)
-
     tuner.tune(tuning_option)
 
 def tuning(
-        tune_autoTVM, tune_autoScheduler, output_c_code,  
+        tune_autoTVM, tune_autoScheduler, use_previous, output_c_code,  
         mod, params, opt_level, 
         trials, number, repeat, timeout, min_repeat_ms, early_stopping, 
         auto_scheduler_alpha, auto_scheduler_beta, auto_scheduler_gamma, auto_scheduler_bws
@@ -378,7 +383,7 @@ def tuning(
 
     if tune_autoTVM:
         try:
-            autoTVM(mod, params, trials, number, repeat, timeout, min_repeat_ms, early_stopping)
+            autoTVM(mod, params, use_previous, trials, number, repeat, timeout, min_repeat_ms, early_stopping)
         except Exception as e:
             print('autoTVM tuning failed:')
             print(e)
@@ -386,7 +391,7 @@ def tuning(
 
     if tune_autoScheduler:
         try:
-            autoScheduler(mod, params, opt_level, trials, number, repeat, timeout, min_repeat_ms, early_stopping, 
+            autoScheduler(mod, params, use_previous, opt_level, trials, number, repeat, timeout, min_repeat_ms, early_stopping, 
                             auto_scheduler_alpha, auto_scheduler_beta, auto_scheduler_gamma, auto_scheduler_bws)
         except Exception as e:
             print('autoScheduler tuning failed:')
