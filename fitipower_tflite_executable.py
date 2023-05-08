@@ -37,6 +37,16 @@ auto_scheduler_alpha = 0.05
 auto_scheduler_beta = 0.5
 auto_scheduler_gamma = 0.5
 auto_scheduler_bws = 1 #backward_window_size
+hardware_setting = {
+    'num_cores': 0, #The number of cores.
+    'vector_unit_bytes': 0, #The width of vector units in bytes. default=64
+    'cache_line_bytes': 0, #The size of cache line in bytes. default=64
+    'max_shared_memory_per_block': 0, #The max amount of shared memory per block for GPU.
+    'max_local_memory_per_block': 0, #The max amount of local memory per block for GPU.
+    'max_threads_per_block': 0, #The max number of threads per block for GPU.
+    'max_vthread_extent': 0, #The max extent of vthread for GPU.
+    'warp_size': 0 #The warp size for GPU
+ } #src/auto_scheduler/search_task.cc
 
 # optimize setting
 opt_level = 3
@@ -86,10 +96,11 @@ if __name__ == "__main__":
         timeout, 
         min_repeat_ms, 
         early_stopping, 
+        hardware_setting, 
         auto_scheduler_alpha, 
         auto_scheduler_beta, 
         auto_scheduler_gamma, 
-        auto_scheduler_bws
+        auto_scheduler_bws, 
     )
 
     lib = tvm.compile(

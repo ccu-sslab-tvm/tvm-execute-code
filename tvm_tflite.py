@@ -51,7 +51,7 @@ class TargetInfo:
     runtime = None
     executor = None
 
-def path_init(model_name:str, img_name:str, use_cmsis_nn:bool, transfer_layout:bool, use_autoTVM_log:bool, use_autoScheduler_log:bool):
+def path_init(img_name, model_name, use_cmsis_nn, transfer_layout, use_autoTVM_log, use_autoScheduler_log):
     Path.output_path = Path.output_path.format(model_name)
 
     Path.model_path = Path.model_path.format(model_name)
@@ -128,7 +128,7 @@ def target_init(target, executor_mode, output_c_code):
         raise RuntimeError('Unknown Executor')
 
 
-def img_init(size:int, input_dtype:str):
+def img_init(size, input_dtype):
     if input_dtype == 'int8':
         img_data = cv2.imread(Path.img_path, cv2.IMREAD_GRAYSCALE)
         img_data = cv2.resize(img_data, (size, size))
@@ -153,7 +153,7 @@ def img_init(size:int, input_dtype:str):
     print('#include "main.h"\r\n\r\nuint8_t raw_data[] = {' + str_rawDara + '};', file=open(Path.str_rawDara_path, 'w'))
     return img_data
 
-def model_init(input_name:str, input_shape:set, input_dtype:str, opt_level:int, use_cmsis_nn:bool, transfer_layout:bool, IR_output:bool):
+def model_init(input_name, input_shape, input_dtype, opt_level, use_cmsis_nn, transfer_layout, IR_output):
     model_buffer = open(Path.model_path, 'rb').read()
 
     try:
@@ -196,11 +196,13 @@ def model_init(input_name:str, input_shape:set, input_dtype:str, opt_level:int, 
 
     return mod, params
 
-def init(img_name:str, size:int, 
-         model_name:str, input_name:str, input_shape:set, input_dtype:str, 
-         target:str, executor_mode:str, opt_level:int, use_cmsis_nn:bool, transfer_layout:bool, IR_output:bool, 
-         use_autoTVM_log:bool, use_autoScheduler_log:bool, 
-         output_c_code:bool):
+def init(
+    img_name:str, size:int, 
+    model_name:str, input_name:str, input_shape:set, input_dtype:str, 
+    target:str, executor_mode:str, opt_level:int, use_cmsis_nn:bool, transfer_layout:bool, IR_output:bool, 
+    use_autoTVM_log:bool, use_autoScheduler_log:bool, 
+    output_c_code:bool
+):
 
     if executor_mode == 'aot':
         input_name = input_name.replace(':', '_')
@@ -209,7 +211,7 @@ def init(img_name:str, size:int,
 
     target_init(target, executor_mode, output_c_code)
 
-    path_init(model_name, img_name, use_cmsis_nn, transfer_layout, use_autoTVM_log, use_autoScheduler_log)
+    path_init(img_name, model_name, use_cmsis_nn, transfer_layout, use_autoTVM_log, use_autoScheduler_log)
 
     img_data = img_init(size, input_dtype)
 
@@ -344,15 +346,33 @@ def autoScheduler_option(trials, number, repeat, timeout, min_repeat_ms, early_s
     return local_rpc if 'local_rpc' in locals() else None, tuning_option
 
 def autoScheduler(
-        mod, params, 
-        use_previous, 
-        opt_level, trials, number, repeat, timeout, min_repeat_ms, early_stopping, 
-        auto_scheduler_alpha, auto_scheduler_beta, auto_scheduler_gamma, auto_scheduler_bws
-    ):
+    mod, params, 
+    use_previous, 
+    opt_level, trials, number, repeat, timeout, min_repeat_ms, early_stopping, 
+    hardware_setting, auto_scheduler_alpha, auto_scheduler_beta, auto_scheduler_gamma, auto_scheduler_bws
+):
     if os.path.exists(Path.autoScheduler_record) and not use_previous:
         os.remove(Path.autoScheduler_record)
+    
+    hardware_params = auto_scheduler.HardwareParams(
+        num_cores = hardware_setting['num_cores'],
+        vector_unit_bytes = hardware_setting['vector_unit_bytes'],
+        cache_line_bytes = hardware_setting['cache_line_bytes'],
+        max_shared_memory_per_block = hardware_setting['max_shared_memory_per_block'],
+        max_local_memory_per_block = hardware_setting['max_local_memory_per_block'],
+        max_threads_per_block = hardware_setting['max_threads_per_block'],
+        max_vthread_extent = hardware_setting['max_vthread_extent'],
+        warp_size = hardware_setting['warp_size'],
+    ) if TargetInfo.target_name in (zephyr_qemu_list | zephyr_board_list) else None
 
-    tasks, task_weights = auto_scheduler.extract_tasks(mod['main'], params, TargetInfo.target, opt_level=opt_level)
+    tasks, task_weights = auto_scheduler.extract_tasks(
+        mod = mod['main'], 
+        params = params, 
+        target = TargetInfo.target, 
+        hardware_params = hardware_params, 
+        include_simple_tasks = True, 
+        opt_level = opt_level
+    )
 
     for idx, task in enumerate(tasks):
         print('========== Task %d  (workload key: %s) ==========' % (idx, task.workload_key))
@@ -374,10 +394,10 @@ def autoScheduler(
     tuner.tune(tuning_option)
 
 def tuning(
-        tune_autoTVM, tune_autoScheduler, use_previous, output_c_code,  
+        tune_autoTVM, tune_autoScheduler, use_previous, output_c_code, 
         mod, params, opt_level, 
         trials, number, repeat, timeout, min_repeat_ms, early_stopping, 
-        auto_scheduler_alpha, auto_scheduler_beta, auto_scheduler_gamma, auto_scheduler_bws
+        hardware_setting, auto_scheduler_alpha, auto_scheduler_beta, auto_scheduler_gamma, auto_scheduler_bws, 
     ):
     assert ((tune_autoTVM or tune_autoScheduler) and output_c_code) == False, "Tuning uses Zephyr to test the execution time, please disable `output_c_code` to make it runnable."
 
@@ -392,13 +412,13 @@ def tuning(
     if tune_autoScheduler:
         try:
             autoScheduler(mod, params, use_previous, opt_level, trials, number, repeat, timeout, min_repeat_ms, early_stopping, 
-                            auto_scheduler_alpha, auto_scheduler_beta, auto_scheduler_gamma, auto_scheduler_bws)
+                            hardware_setting, auto_scheduler_alpha, auto_scheduler_beta, auto_scheduler_gamma, auto_scheduler_bws)
         except Exception as e:
             print('autoScheduler tuning failed:')
             print(e)
             print('Please check if the autoScheduler tuning log is usable.')
 
-def compile(mod, params, opt_level:int, output_c_code:bool, use_autoTVM_log:bool, use_autoScheduler_log:bool):
+def compile(mod, params, opt_level, output_c_code, use_autoTVM_log, use_autoScheduler_log):
     assert TargetInfo.target and TargetInfo.executor, 'Target and Executor can not be \'None\'.'
 
     if use_autoTVM_log:
