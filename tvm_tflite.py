@@ -175,10 +175,7 @@ def model_init(input_name, input_shape, input_dtype, opt_level, use_cmsis_nn, tr
 
     if use_cmsis_nn:
         if TargetInfo.target_name in (zephyr_qemu_list | zephyr_board_list):
-            config = {'tir.disable_vectorize': True}
-            config['relay.ext.cmsisnn.options'] = {'mcpu': TargetInfo.target.mcpu}
-            with transform.PassContext(config=config):
-                mod = cmsisnn.partition_for_cmsisnn(mod, params, mcpu=TargetInfo.target.mcpu)
+            mod = cmsisnn.partition_for_cmsisnn(mod, params, mcpu=TargetInfo.target.mcpu)
         
             if IR_output:
                 print(mod, file = open(Path.cmsis_nn_relay, 'w'))
@@ -366,7 +363,7 @@ def autoScheduler(
     ) if TargetInfo.target_name in (zephyr_qemu_list | zephyr_board_list) else None
 
     tasks, task_weights = auto_scheduler.extract_tasks(
-        mod = mod['main'], 
+        mod = mod, 
         params = params, 
         target = TargetInfo.target, 
         hardware_params = hardware_params, 
@@ -439,6 +436,7 @@ def compile(mod, params, opt_level, output_c_code, use_autoTVM_log, use_autoSche
             config['tir.disable_storage_rewrite'] = True
     if use_autoScheduler_log:
         config['relay.backend.use_auto_scheduler'] = True
+    config['relay.ext.cmsisnn.options'] = {'mcpu': TargetInfo.target.mcpu}
 
     with dispatch_context:
         with transform.PassContext(
@@ -502,6 +500,10 @@ def run_zephyr(lib, input_name, img_data, test_time):
     project_options = {
         'project_type': 'host_driven', #host_driven, aot_standalone_demo
         'zephyr_board': TargetInfo.target_name, 
+        'use_cmsis': True, 
+        'compile_definitions': [
+            f'-DCOMPILE_WITH_CMSISNN=1', 
+        ], 
     } if TargetInfo.target_name in zephyr_board_list else {}
 
     temp_dir = tvm.contrib.utils.tempdir(Path.tvm_temp_path)
