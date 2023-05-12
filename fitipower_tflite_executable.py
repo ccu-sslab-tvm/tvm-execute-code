@@ -33,8 +33,8 @@ min_repeat_ms = 0
 early_stopping = 100
 
 # tuner setting only for autoScheduler
-auto_scheduler_alpha = 0.05
-auto_scheduler_beta = 0.5
+auto_scheduler_alpha = 0.2
+auto_scheduler_beta = 2
 auto_scheduler_gamma = 0.5
 auto_scheduler_bws = 1 #backward_window_size
 hardware_setting = {
@@ -46,7 +46,7 @@ hardware_setting = {
     'max_threads_per_block': 0, #The max number of threads per block for GPU.
     'max_vthread_extent': 0, #The max extent of vthread for GPU.
     'warp_size': 0 #The warp size for GPU
- } #src/auto_scheduler/search_task.cc
+} #src/auto_scheduler/search_task.cc
 
 # optimize setting
 opt_level = 3
@@ -117,6 +117,7 @@ if __name__ == "__main__":
             lib, 
             input_name, 
             img_data, 
+            use_cmsis_nn, 
             test_time, 
         )
 

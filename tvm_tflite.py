@@ -490,7 +490,7 @@ def run_computer(lib, input_name, img_data, test_time):
     tvm_output = executor.get_output(0).numpy()
     return tvm_output[0]
 
-def run_zephyr(lib, input_name, img_data, test_time):
+def run_zephyr(lib, input_name, img_data, use_cmsis, test_time):
     # flash to board
     template_project = pathlib.Path(
         tvm.micro.get_microtvm_template_projects(
@@ -500,7 +500,7 @@ def run_zephyr(lib, input_name, img_data, test_time):
     project_options = {
         'project_type': 'host_driven', #host_driven, aot_standalone_demo
         'zephyr_board': TargetInfo.target_name, 
-        'use_cmsis': True, 
+        'use_cmsis': use_cmsis, 
         'compile_definitions': [
             f'-DCOMPILE_WITH_CMSISNN=1', 
         ], 
@@ -541,10 +541,10 @@ def run_zephyr(lib, input_name, img_data, test_time):
         tvm_output = executor.get_output(0).numpy()
     return tvm_output[0]
 
-def run(lib, input_name, img_data, test_time):
+def run(lib, input_name, img_data, use_cmsis, test_time):
     if TargetInfo.target_name in computer_target_list:
         return run_computer(lib, input_name, img_data, test_time)
     elif TargetInfo.target_name in (zephyr_qemu_list | zephyr_board_list):
-        return run_zephyr(lib, input_name, img_data, test_time)
+        return run_zephyr(lib, input_name, img_data, use_cmsis, test_time)
     else:
         raise RuntimeError('Run tvm failed, please check your target.')
