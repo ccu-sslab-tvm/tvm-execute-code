@@ -297,7 +297,7 @@ def autoTVM(mod, params, use_previous, trials, number, repeat, timeout, min_repe
             ],
         )
 
-def autoScheduler_option(trials, number, repeat, timeout, min_repeat_ms, early_stopping):
+def autoScheduler_option(trials, number, repeat, timeout, min_repeat_ms, early_stopping, num_measures_per_round):
     if TargetInfo.target_name in computer_target_list:
         builder = auto_scheduler.LocalBuilder()
         runner = auto_scheduler.LocalRunner(
@@ -336,6 +336,7 @@ def autoScheduler_option(trials, number, repeat, timeout, min_repeat_ms, early_s
     tuning_option = auto_scheduler.TuningOptions(
         num_measure_trials = trials, 
         early_stopping = early_stopping,
+        num_measures_per_round = num_measures_per_round, 
         builder = builder,
         runner = runner,
         measure_callbacks = [auto_scheduler.RecordToFile(Path.autoScheduler_record)],
@@ -345,7 +346,7 @@ def autoScheduler_option(trials, number, repeat, timeout, min_repeat_ms, early_s
 def autoScheduler(
     mod, params, 
     use_previous, 
-    opt_level, trials, number, repeat, timeout, min_repeat_ms, early_stopping, 
+    opt_level, trials, number, repeat, timeout, min_repeat_ms, early_stopping, num_measures_per_round, 
     hardware_setting, auto_scheduler_alpha, auto_scheduler_beta, auto_scheduler_gamma, auto_scheduler_bws
 ):
     if os.path.exists(Path.autoScheduler_record) and not use_previous:
@@ -375,7 +376,7 @@ def autoScheduler(
         print('========== Task %d  (workload key: %s) ==========' % (idx, task.workload_key))
         print(task.compute_dag)
 
-    _, tuning_option = autoScheduler_option(trials, number, repeat, timeout, min_repeat_ms, early_stopping)
+    _, tuning_option = autoScheduler_option(trials, number, repeat, timeout, min_repeat_ms, early_stopping, num_measures_per_round)
 
     tuner = auto_scheduler.TaskScheduler(
         tasks = tasks, 
@@ -393,7 +394,7 @@ def autoScheduler(
 def tuning(
         tune_autoTVM, tune_autoScheduler, use_previous, output_c_code, 
         mod, params, opt_level, 
-        trials, number, repeat, timeout, min_repeat_ms, early_stopping, 
+        trials, number, repeat, timeout, min_repeat_ms, early_stopping, num_measures_per_round, 
         hardware_setting, auto_scheduler_alpha, auto_scheduler_beta, auto_scheduler_gamma, auto_scheduler_bws, 
     ):
     assert ((tune_autoTVM or tune_autoScheduler) and output_c_code) == False, "Tuning uses Zephyr to test the execution time, please disable `output_c_code` to make it runnable."
@@ -408,7 +409,7 @@ def tuning(
 
     if tune_autoScheduler:
         try:
-            autoScheduler(mod, params, use_previous, opt_level, trials, number, repeat, timeout, min_repeat_ms, early_stopping, 
+            autoScheduler(mod, params, use_previous, opt_level, trials, number, repeat, timeout, min_repeat_ms, early_stopping, num_measures_per_round, 
                             hardware_setting, auto_scheduler_alpha, auto_scheduler_beta, auto_scheduler_gamma, auto_scheduler_bws)
         except Exception as e:
             print('autoScheduler tuning failed:')

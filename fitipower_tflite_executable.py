@@ -33,6 +33,7 @@ min_repeat_ms = 0
 early_stopping = 100
 
 # tuner setting only for autoScheduler
+num_measures_per_round = 64
 auto_scheduler_alpha = 0.2
 auto_scheduler_beta = 2
 auto_scheduler_gamma = 0.5
@@ -96,6 +97,7 @@ if __name__ == "__main__":
         timeout, 
         min_repeat_ms, 
         early_stopping, 
+        num_measures_per_round, 
         hardware_setting, 
         auto_scheduler_alpha, 
         auto_scheduler_beta, 
