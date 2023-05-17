@@ -105,7 +105,7 @@ def path_init(img_name, model_name, use_cmsis_nn, transfer_layout, use_autoTVM_l
     if not os.path.exists(Path.output_path):
         os.mkdir(Path.output_path)
 
-def target_init(target, executor_mode, output_c_code):
+def target_init(target, executor_mode, output_c_code, project_type):
     TargetInfo.target_name = target
     TargetInfo.executor_mode = executor_mode
 
@@ -116,14 +116,14 @@ def target_init(target, executor_mode, output_c_code):
         with open(pathlib.Path(tvm.micro.get_microtvm_template_projects('zephyr')) / 'boards.json') as f:
             boards = json.load(f)
         TargetInfo.target = tvm.target.target.micro(boards[target]['model'] if target in zephyr_board_list else 'host')
-        TargetInfo.runtime = Runtime('crt', {} if output_c_code and (executor_mode == 'aot') else {'system-lib': True})
+        TargetInfo.runtime = Runtime('crt', {} if (output_c_code or project_type == 'fiti_standalone') and (executor_mode == 'aot') else {'system-lib': True})
     else:
         raise RuntimeError('{0} is an unknown target.'.format(target))
     
     if executor_mode == 'graph':
-        TargetInfo.executor = Executor('graph', {"link-params": True} if output_c_code else {})
+        TargetInfo.executor = Executor('graph', {"link-params": True} if (output_c_code or project_type == 'fiti_standalone') else {})
     elif executor_mode == 'aot':
-        TargetInfo.executor = Executor("aot", {"unpacked-api": True, "interface-api": "c"} if output_c_code else None)
+        TargetInfo.executor = Executor("aot", {"unpacked-api": True, "interface-api": "c"} if (output_c_code or project_type == 'fiti_standalone') else None)
     else:
         raise RuntimeError('Unknown Executor')
 
@@ -198,7 +198,7 @@ def init(
     model_name:str, input_name:str, input_shape:set, input_dtype:str, 
     target:str, executor_mode:str, opt_level:int, use_cmsis_nn:bool, transfer_layout:bool, IR_output:bool, 
     use_autoTVM_log:bool, use_autoScheduler_log:bool, 
-    output_c_code:bool
+    output_c_code:bool, project_type:str
 ):
 
     if executor_mode == 'aot':
@@ -206,7 +206,7 @@ def init(
     
     assert (use_autoTVM_log and use_autoScheduler_log) is not True, 'It can only use autoTVM or autoScheduler tuning log to compile at one time.'
 
-    target_init(target, executor_mode, output_c_code)
+    target_init(target, executor_mode, output_c_code, project_type)
 
     path_init(img_name, model_name, use_cmsis_nn, transfer_layout, use_autoTVM_log, use_autoScheduler_log)
 
@@ -416,7 +416,7 @@ def tuning(
             print(e)
             print('Please check if the autoScheduler tuning log is usable.')
 
-def compile(mod, params, opt_level, output_c_code, use_autoTVM_log, use_autoScheduler_log):
+def compile(mod, params, opt_level, output_c_code, project_type, use_autoTVM_log, use_autoScheduler_log):
     assert TargetInfo.target and TargetInfo.executor, 'Target and Executor can not be \'None\'.'
 
     if use_autoTVM_log:
@@ -431,7 +431,7 @@ def compile(mod, params, opt_level, output_c_code, use_autoTVM_log, use_autoSche
     config = {}
     if TargetInfo.target_name in (zephyr_qemu_list | zephyr_board_list):
         config['tir.disable_vectorize'] = True
-        if output_c_code and TargetInfo.executor_mode == 'aot':
+        if (output_c_code or project_type == 'fiti_standalone') and TargetInfo.executor_mode == 'aot':
             config['tir.usmp.enable'] = True
             config['tir.usmp.algorithm'] = 'hill_climb'
             config['tir.disable_storage_rewrite'] = True
@@ -491,7 +491,7 @@ def run_computer(lib, input_name, img_data, test_time):
     tvm_output = executor.get_output(0).numpy()
     return tvm_output[0]
 
-def run_zephyr(lib, input_name, img_data, use_cmsis, test_time):
+def run_zephyr(lib, input_name, img_data, project_type, use_cmsis, test_time):
     # flash to board
     template_project = pathlib.Path(
         tvm.micro.get_microtvm_template_projects(
@@ -499,7 +499,7 @@ def run_zephyr(lib, input_name, img_data, use_cmsis, test_time):
         )
     )
     project_options = {
-        'project_type': 'host_driven', #host_driven, aot_standalone_demo
+        'project_type': project_type,
         'zephyr_board': TargetInfo.target_name, 
         'use_cmsis': use_cmsis, 
         'compile_definitions': [
@@ -515,37 +515,40 @@ def run_zephyr(lib, input_name, img_data, use_cmsis, test_time):
     generated_project.build()
     generated_project.flash()
 
-    with tvm.micro.Session(transport_context_manager = generated_project.transport()) as session:
-        if TargetInfo.executor_mode == 'graph':
-            executor = tvm.micro.create_local_graph_executor(
-                lib.get_graph_json(), session.get_system_lib(), session.device
+    if project_type == 'host_driven':
+        with tvm.micro.Session(transport_context_manager = generated_project.transport()) as session:
+            if TargetInfo.executor_mode == 'graph':
+                executor = tvm.micro.create_local_graph_executor(
+                    lib.get_graph_json(), session.get_system_lib(), session.device
+                )
+            elif TargetInfo.executor_mode == 'aot':
+                executor = tvm.runtime.executor.aot_executor.AotModule(session.create_aot_executor())
+
+            executor.set_input(
+                input_name, 
+                img_data, 
+                **lib.get_params()
             )
-        elif TargetInfo.executor_mode == 'aot':
-            executor = tvm.runtime.executor.aot_executor.AotModule(session.create_aot_executor())
 
-        executor.set_input(
-            input_name, 
-            img_data, 
-            **lib.get_params()
-        )
+            total_time = 0.0
+            for time in range(test_time):
+                time_start = datetime.now().timestamp()
+                executor.run()
+                time_end = datetime.now().timestamp() # 計算 graph_mod 的執行時間
+                total_time += time_end - time_start
+                print('{0}. {1} -> {2}'.format(time+1, time_end - time_start, total_time))
+            avg_time = total_time / test_time
+            print('avg spent {0}'.format(avg_time))
 
-        total_time = 0.0
-        for time in range(test_time):
-            time_start = datetime.now().timestamp()
-            executor.run()
-            time_end = datetime.now().timestamp() # 計算 graph_mod 的執行時間
-            total_time += time_end - time_start
-            print('{0}. {1} -> {2}'.format(time+1, time_end - time_start, total_time))
-        avg_time = total_time / test_time
-        print('avg spent {0}'.format(avg_time))
+            tvm_output = executor.get_output(0).numpy()
+        return tvm_output[0]
+    else:
+        return None
 
-        tvm_output = executor.get_output(0).numpy()
-    return tvm_output[0]
-
-def run(lib, input_name, img_data, use_cmsis, test_time):
+def run(lib, input_name, img_data, project_type, use_cmsis, test_time):
     if TargetInfo.target_name in computer_target_list:
         return run_computer(lib, input_name, img_data, test_time)
     elif TargetInfo.target_name in (zephyr_qemu_list | zephyr_board_list):
-        return run_zephyr(lib, input_name, img_data, use_cmsis, test_time)
+        return run_zephyr(lib, input_name, img_data, project_type, use_cmsis, test_time)
     else:
         raise RuntimeError('Run tvm failed, please check your target.')

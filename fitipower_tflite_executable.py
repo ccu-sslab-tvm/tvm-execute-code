@@ -54,6 +54,9 @@ opt_level = 3
 use_autoTVM_log = False
 use_autoScheduler_log = False
 
+# project_type for Zephyr
+project_type = 'host_driven' #host_driven, aot_standalone_demo, fiti_standalone
+
 # make C code
 output_c_code = False
 
@@ -81,6 +84,7 @@ if __name__ == "__main__":
         use_autoTVM_log, 
         use_autoScheduler_log, 
         output_c_code, 
+        project_type, 
     )
 
     tvm.tuning(
@@ -110,6 +114,7 @@ if __name__ == "__main__":
         params, 
         opt_level, 
         output_c_code, 
+        project_type, 
         use_autoTVM_log, 
         use_autoScheduler_log, 
     )
@@ -119,18 +124,20 @@ if __name__ == "__main__":
             lib, 
             input_name, 
             img_data, 
+            project_type, 
             use_cmsis_nn, 
             test_time, 
         )
 
-        post.post_process(
-            output, 
-            tvm.Path.output_path, 
-            tvm.Path.img_path, 
-            img_name, 
-            size, 
-            dequantance, 
-            candidate, 
-            class_num, 
-            class_label, 
-        )
+        if project_type == 'host_driven':
+            post.post_process(
+                output, 
+                tvm.Path.output_path, 
+                tvm.Path.img_path, 
+                img_name, 
+                size, 
+                dequantance, 
+                candidate, 
+                class_num, 
+                class_label, 
+            )
