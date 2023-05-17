@@ -115,6 +115,7 @@ if __name__ == "__main__":
         opt_level, 
         output_c_code, 
         project_type, 
+        use_cmsis_nn, 
         use_autoTVM_log, 
         use_autoScheduler_log, 
     )

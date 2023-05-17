@@ -416,7 +416,7 @@ def tuning(
             print(e)
             print('Please check if the autoScheduler tuning log is usable.')
 
-def compile(mod, params, opt_level, output_c_code, project_type, use_autoTVM_log, use_autoScheduler_log):
+def compile(mod, params, opt_level, output_c_code, project_type, use_cmsis, use_autoTVM_log, use_autoScheduler_log):
     assert TargetInfo.target and TargetInfo.executor, 'Target and Executor can not be \'None\'.'
 
     if use_autoTVM_log:
@@ -435,9 +435,10 @@ def compile(mod, params, opt_level, output_c_code, project_type, use_autoTVM_log
             config['tir.usmp.enable'] = True
             config['tir.usmp.algorithm'] = 'hill_climb'
             config['tir.disable_storage_rewrite'] = True
+        if use_cmsis:
+            config['relay.ext.cmsisnn.options'] = {'mcpu': TargetInfo.target.mcpu}
     if use_autoScheduler_log:
         config['relay.backend.use_auto_scheduler'] = True
-    config['relay.ext.cmsisnn.options'] = {'mcpu': TargetInfo.target.mcpu}
 
     with dispatch_context:
         with transform.PassContext(
