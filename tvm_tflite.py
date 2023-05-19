@@ -431,10 +431,9 @@ def compile(mod, params, opt_level, output_c_code, project_type, use_cmsis, use_
     config = {}
     if TargetInfo.target_name in (zephyr_qemu_list | zephyr_board_list):
         config['tir.disable_vectorize'] = True
-        if (output_c_code or project_type == 'fiti_standalone') and TargetInfo.executor_mode == 'aot':
+        if (output_c_code or (project_type == 'fiti_standalone')) and (TargetInfo.executor_mode == 'aot'):
             config['tir.usmp.enable'] = True
             config['tir.usmp.algorithm'] = 'hill_climb'
-            config['tir.disable_storage_rewrite'] = True
         if use_cmsis:
             config['relay.ext.cmsisnn.options'] = {'mcpu': TargetInfo.target.mcpu}
     if use_autoScheduler_log:
