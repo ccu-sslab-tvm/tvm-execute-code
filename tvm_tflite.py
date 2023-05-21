@@ -16,6 +16,7 @@ from tvm.driver.tvmc.composite_target import get_codegen_by_target
 from tvm.driver.tvmc.pass_config import parse_configs
 from tvm.relay.backend import Executor, Runtime
 from tvm.relay.op.contrib import cmsisnn
+from tvm.target import Target
 
 computer_target_list = {'llvm'}
 zephyr_qemu_list = {'qemu_x86'}
@@ -110,12 +111,13 @@ def target_init(target, executor_mode, output_c_code, project_type):
     TargetInfo.executor_mode = executor_mode
 
     if target in computer_target_list:
-        TargetInfo.target = target
+        TargetInfo.target = Target(target, host = target)
         TargetInfo.runtime = Runtime('cpp')
     elif target in (zephyr_qemu_list | zephyr_board_list):
         with open(pathlib.Path(tvm.micro.get_microtvm_template_projects('zephyr')) / 'boards.json') as f:
             boards = json.load(f)
-        TargetInfo.target = tvm.target.target.micro(boards[target]['model'] if target in zephyr_board_list else 'host')
+        micro_target = tvm.target.target.micro(boards[target]['model'] if target in zephyr_board_list else 'host')
+        TargetInfo.target = Target(micro_target, host = micro_target)
         TargetInfo.runtime = Runtime('crt', {} if (output_c_code or (project_type == 'fiti_standalone')) and (executor_mode == 'aot') else {'system-lib': True})
     else:
         raise RuntimeError('{0} is an unknown target.'.format(target))
