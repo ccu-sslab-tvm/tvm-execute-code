@@ -46,7 +46,7 @@ min_repeat_ms:int = 0
 early_stopping:int = 100
 
 # tuner setting only for autoScheduler
-num_measures_per_round:int = 1
+num_measures_per_round:int = 5
 auto_scheduler_alpha:float = 0.2
 auto_scheduler_beta:float = 2
 auto_scheduler_gamma:float = 0.5
@@ -61,6 +61,7 @@ hardware_setting:dict = {
     'max_vthread_extent': 0,
     'warp_size': 0
 }
+include_simple_tasks:bool = 1
 
 # optimize setting
 opt_level:int = 3
@@ -284,7 +285,7 @@ if tune_autoScheduler:
         params = params, 
         target = target, 
         hardware_params = hardware_params, 
-        include_simple_tasks = True, 
+        include_simple_tasks = include_simple_tasks, 
         opt_level = opt_level
     )
 
