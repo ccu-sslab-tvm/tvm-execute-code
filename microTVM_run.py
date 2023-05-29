@@ -15,11 +15,10 @@ from tvm.micro.testing import get_target
 from tvm.relay.backend import Executor, Runtime
 from tvm.relay.op.contrib import cmsisnn
 
-from model_define import yolov5_704_int8 as model_define
-from post_process import post_process_fitipower as post
+from model_define import choose_the_model as model_define
 
 # input setting
-img_index:int = 0
+input_index:int = 0 # for img or number
 
 # output setting
 IR_output:bool = 1
@@ -78,15 +77,20 @@ output_c_code:bool = 0
 model_info = model_define()
 
 try:
-    img_selection = model_info.img[img_index]
+    img_selection = model_info.img[input_index]
+    num_selection = None
 except:
     img_selection = None
-assert img_selection is not None, 'Image path is empty.'
+    num_selection = model_info.input_num[input_index]
+assert (img_selection or num_selection) is not None, 'Image path is empty.'
 
 output_path = f'./test_outputs/fitipower@{model_info.name}'
 
 model_path = f'./model/{model_info.name}' # model_name
-img_path = f'./img/{img_selection}' # img_name
+if img_selection is not None:
+    img_path = f'./img/{img_selection}' # img_name
+else:
+    img_path = None
 
 img_rawData_path = output_path + '/rawData.c'
 
@@ -140,26 +144,31 @@ elif executor_mode == 'aot':
         executor = Executor('aot')
 
 # image preprocess
-if model_info.input_dtype == 'int8':
-    img_data = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
-    img_data = cv2.resize(img_data, (model_info.img_height_width, model_info.img_height_width))
-    img_data = numpy.array(img_data) - 128 # 量化到 int8 空間
-    img_data = numpy.expand_dims(img_data, axis = (0, -1)).astype('int8')
-elif model_info.input_dtype == 'float32':
-    img_data = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
-    img_data = cv2.resize(img_data, (model_info.img_height_width, model_info.img_height_width))
-    img_data = numpy.expand_dims(img_data, axis = (0, -1)) / 255
+if img_path is not None:
+    if model_info.input_dtype == 'int8':
+        img_data = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
+        img_data = cv2.resize(img_data, (model_info.img_height_width, model_info.img_height_width))
+        img_data = numpy.array(img_data) - 128 # 量化到 int8 空間
+        img_data = numpy.expand_dims(img_data, axis = (0, -1)).astype('int8')
+    elif model_info.input_dtype == 'float32':
+        img_data = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
+        img_data = cv2.resize(img_data, (model_info.img_height_width, model_info.img_height_width))
+        img_data = numpy.expand_dims(img_data, axis = (0, -1)) / 255
 
-if verbose_output:
-    rawData = img_data.reshape(model_info.img_height_width*model_info.img_height_width)
-    count = 0
-    str_rawDara = '\r\n\t'
-    for i in rawData:
-        str_rawDara += str(i) + ', '
-        if (count+1) % model_info.img_height_width == 0:
-            str_rawDara += '\r\n\t'
-        count += 1
-    print('int8_t raw_data[] = {' + str_rawDara + '};', file=open(img_rawData_path, 'w'))
+    if verbose_output:
+        rawData = img_data.reshape(model_info.img_height_width*model_info.img_height_width)
+        count = 0
+        str_rawDara = '\r\n\t'
+        for i in rawData:
+            str_rawDara += str(i) + ', '
+            if (count+1) % model_info.img_height_width == 0:
+                str_rawDara += '\r\n\t'
+            count += 1
+        print('int8_t raw_data[] = {' + str_rawDara + '};', file=open(img_rawData_path, 'w'))
+
+if num_selection is not None:
+    if model_info.input_dtype == 'int8':
+        num_selection = numpy.array(num_selection) - 128
 
 # load model
 model_buffer = open(model_path, 'rb').read()
@@ -416,11 +425,18 @@ with tvm.micro.Session(transport_context_manager = generated_project.transport()
     elif executor_mode == 'aot':
         model_executor = tvm.runtime.executor.aot_executor.AotModule(session.create_aot_executor())
 
-    model_executor.set_input(
-        model_info.input_name, 
-        img_data, 
-        **lib.get_params()
-    )
+    if img_selection is not None:
+        model_executor.set_input(
+            model_info.input_name, 
+            img_data, 
+            **lib.get_params()
+        )
+    elif num_selection is not None:
+        model_executor.set_input(
+            model_info.input_name, 
+            tvm.nd.array(numpy.array(num_selection, dtype=model_info.input_dtype)), 
+            **lib.get_params()
+        )
 
     total_time = 0.0
     for time in range(test_time):
@@ -435,14 +451,12 @@ with tvm.micro.Session(transport_context_manager = generated_project.transport()
     tvm_output = model_executor.get_output(0).numpy()
 
 # post process
-post.post_process(
-    tvm_output[0],
-    output_path,
-    img_path,
-    img_selection,
-    model_info.img_height_width,
-    model_info.dequantance,
-    model_info.candidate,
-    model_info.class_num,
-    model_info.class_label
-)
+try:
+    model_info.post_process(
+        tvm_output,
+        output_path,
+        img_path,
+        img_selection
+    )
+except:
+    print(model_info.dequantance[0] * (tvm_output + model_info.dequantance[1]))
