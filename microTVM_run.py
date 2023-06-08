@@ -146,14 +146,14 @@ elif executor_mode == 'aot':
 # image preprocess
 if img_path is not None:
     if model_info.input_dtype == 'int8':
-        img_data = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
+        img_data = cv2.imread(img_path, model_info.flags)
         img_data = cv2.resize(img_data, (model_info.img_height_width, model_info.img_height_width))
         img_data = numpy.array(img_data) - 128 # 量化到 int8 空間
-        img_data = numpy.expand_dims(img_data, axis = (0, -1)).astype('int8')
+        img_data = numpy.reshape(img_data, model_info.input_shape).astype('int8')
     elif model_info.input_dtype == 'float32':
-        img_data = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
+        img_data = cv2.imread(img_path, model_info.flags)
         img_data = cv2.resize(img_data, (model_info.img_height_width, model_info.img_height_width))
-        img_data = numpy.expand_dims(img_data, axis = (0, -1)) / 255
+        img_data = numpy.reshape(img_data, model_info.input_shape) / 255
 
     if verbose_output:
         rawData = img_data.reshape(model_info.img_height_width*model_info.img_height_width)
