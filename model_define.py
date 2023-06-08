@@ -1,4 +1,7 @@
+import cv2
+
 from post_process import post_process_fitipower
+
 
 class sine_float32:
     # input data
@@ -11,6 +14,7 @@ class sine_float32:
     input_name = 'dense_4_input'
     input_shape = (1, 1)
     input_dtype = 'float32'
+    flags = None
 
     # dequantance info
     dequantance = [1, 0]
@@ -32,6 +36,7 @@ class yolov5_704_int8:
     input_name = 'input_1:int8'
     input_shape = (1, img_height_width, img_height_width, 1)
     input_dtype = 'int8'
+    flags = cv2.IMREAD_GRAYSCALE
 
     # dequantance info
     dequantance = [0.006245302967727184, 122]
@@ -49,6 +54,7 @@ class yolov5_704_int8:
             output_path,
             img_path,
             img_selection,
+            self.flags,
             self.img_height_width,
             self.dequantance,
             self.candidate,
@@ -69,6 +75,7 @@ class y7_1336_int8:
     input_name = 'serving_default_input_1:0_int8'
     input_shape = (1, img_height_width, img_height_width, 1)
     input_dtype = 'int8'
+    flags = cv2.IMREAD_GRAYSCALE
 
     # dequantance info
     dequantance = [0.0354100801050663, 128]
@@ -85,6 +92,7 @@ class y7_1336_int8:
             output_path,
             img_path,
             img_selection,
+            self.flags,
             self.img_height_width,
             self.dequantance,
             self.candidate,
@@ -92,7 +100,7 @@ class y7_1336_int8:
             self.class_label
         )
 
-class _5x5_cus_model_fp32:
+class tflite_5x5_cus_model_fp32:
     # input data
     input_num = [
         [
@@ -106,9 +114,10 @@ class _5x5_cus_model_fp32:
 
     # model info
     name = '_5x5_tfmodel_fp32.tflite'
-    input_name = 'serving_default_input_1_0'
+    input_name = 'serving_default_input_1:0'
     input_shape = (1, 5, 5, 1)
     input_dtype = 'float32'
+    flags = None
 
     # dequantance info
     dequantance = [1, 0]
@@ -116,7 +125,7 @@ class _5x5_cus_model_fp32:
     def __init__(self):
         """ if input name have `:`, change it to `_` or not. """
 
-class _5x5_cus_model_int8:
+class tflite_5x5_cus_model_int8:
     # input data
     input_num = [
         [
@@ -130,12 +139,169 @@ class _5x5_cus_model_int8:
 
     # model info
     name = '_5x5_tfmodel_int8.tflite'
-    input_name = 'serving_default_input_1_0'
+    input_name = 'serving_default_input_1:0'
     input_shape = (1, 5, 5, 1)
     input_dtype = 'int8'
+    flags = None
 
     # dequantance info
     dequantance = [4.9490203857421875, 128]
 
     def __init__(self):
         """ if input name have `:`, change it to `_` or not. """
+
+class yolov5x_fp32:
+    # input data
+    img = [
+        'tourist_area.jpg',
+        'bus.jpg',
+        'zidane.jpg'
+    ]
+
+    # model info
+    name = 'yolov5x-fp16.tflite'
+    img_height_width = 640
+    input_name = 'serving_default_input_1:0'
+    input_shape = (1, img_height_width, img_height_width, 3)
+    input_dtype = 'float32'
+    flags = None
+
+    # dequantance info
+    dequantance = [1, 0]
+    candidate = 25200
+    class_num = 80
+    class_label = ['person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck', 'boat', 'traffic light', 'fire hydrant', 'stop sign', 'parking meter', 'bench', 'bird', 'cat', 'dog', 'horse', 'sheep', 'cow', 'elephant', 'bear', 'zebra', 'giraffe', 'backpack', 'umbrella', 'handbag', 'tie', 'suitcase', 'frisbee', 'skis', 'snowboard', 'sports ball', 'kite', 'baseball bat', 'baseball glove', 'skateboard', 'surfboard', 'tennis racket', 'bottle', 'wine glass', 'cup', 'fork', 'knife', 'spoon', 'bowl', 'banana', 'apple', 'sandwich', 'orange', 'broccoli', 'carrot', 'hot dog', 'pizza', 'donut', 'cake', 'chair', 'couch', 'potted plant', 'bed', 'dining table', 'toilet', 'tv', 'laptop', 'mouse', 'remote', 'keyboard', 'cell phone', 'microwave', 'oven', 'toaster', 'sink', 'refrigerator', 'book', 'clock', 'vase', 'scissors', 'teddy bear', 'hair drier', 'toothbrush']
+
+    def __init__(self):
+        """ if input name have `:`, change it to `_` or not. """
+    
+    def post_process(self, output, output_path, img_path, img_selection):
+        post_process_fitipower.post_process(
+            output[0],
+            output_path,
+            img_path,
+            img_selection,
+            self.flags,
+            self.img_height_width,
+            self.dequantance,
+            self.candidate,
+            self.class_num,
+            self.class_label
+        )
+
+class yolov5x_int8:
+    # input data
+    img = [
+        'tourist_area.jpg',
+        'bus.jpg',
+        'zidane.jpg'
+    ]
+
+    # model info
+    name = 'yolov5x-int8.tflite'
+    img_height_width = 640
+    input_name = 'serving_default_input_1:0'
+    input_shape = (1, img_height_width, img_height_width, 3)
+    input_dtype = 'int8'
+    flags = None
+
+    # dequantance info
+    dequantance = [0.0044934190809726715, -1]
+    candidate = 25200
+    class_num = 80
+    class_label = ['person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck', 'boat', 'traffic light', 'fire hydrant', 'stop sign', 'parking meter', 'bench', 'bird', 'cat', 'dog', 'horse', 'sheep', 'cow', 'elephant', 'bear', 'zebra', 'giraffe', 'backpack', 'umbrella', 'handbag', 'tie', 'suitcase', 'frisbee', 'skis', 'snowboard', 'sports ball', 'kite', 'baseball bat', 'baseball glove', 'skateboard', 'surfboard', 'tennis racket', 'bottle', 'wine glass', 'cup', 'fork', 'knife', 'spoon', 'bowl', 'banana', 'apple', 'sandwich', 'orange', 'broccoli', 'carrot', 'hot dog', 'pizza', 'donut', 'cake', 'chair', 'couch', 'potted plant', 'bed', 'dining table', 'toilet', 'tv', 'laptop', 'mouse', 'remote', 'keyboard', 'cell phone', 'microwave', 'oven', 'toaster', 'sink', 'refrigerator', 'book', 'clock', 'vase', 'scissors', 'teddy bear', 'hair drier', 'toothbrush']
+
+    def __init__(self):
+        """ if input name have `:`, change it to `_` or not. """
+    
+    def post_process(self, output, output_path, img_path, img_selection):
+        post_process_fitipower.post_process(
+            output[0],
+            output_path,
+            img_path,
+            img_selection,
+            self.flags,
+            self.img_height_width,
+            self.dequantance,
+            self.candidate,
+            self.class_num,
+            self.class_label
+        )
+
+class yolov5n_fp32:
+    # input data
+    img = [
+        'tourist_area.jpg',
+        'bus.jpg',
+        'zidane.jpg'
+    ]
+
+    # model info
+    name = 'yolov5n-fp16.tflite'
+    img_height_width = 640
+    input_name = 'serving_default_input_1:0'
+    input_shape = (1, img_height_width, img_height_width, 3)
+    input_dtype = 'float32'
+    flags = None
+
+    # dequantance info
+    dequantance = [1, 0]
+    candidate = 25200
+    class_num = 80
+    class_label = ['person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck', 'boat', 'traffic light', 'fire hydrant', 'stop sign', 'parking meter', 'bench', 'bird', 'cat', 'dog', 'horse', 'sheep', 'cow', 'elephant', 'bear', 'zebra', 'giraffe', 'backpack', 'umbrella', 'handbag', 'tie', 'suitcase', 'frisbee', 'skis', 'snowboard', 'sports ball', 'kite', 'baseball bat', 'baseball glove', 'skateboard', 'surfboard', 'tennis racket', 'bottle', 'wine glass', 'cup', 'fork', 'knife', 'spoon', 'bowl', 'banana', 'apple', 'sandwich', 'orange', 'broccoli', 'carrot', 'hot dog', 'pizza', 'donut', 'cake', 'chair', 'couch', 'potted plant', 'bed', 'dining table', 'toilet', 'tv', 'laptop', 'mouse', 'remote', 'keyboard', 'cell phone', 'microwave', 'oven', 'toaster', 'sink', 'refrigerator', 'book', 'clock', 'vase', 'scissors', 'teddy bear', 'hair drier', 'toothbrush']
+
+    def __init__(self):
+        """ if input name have `:`, change it to `_` or not. """
+    
+    def post_process(self, output, output_path, img_path, img_selection):
+        post_process_fitipower.post_process(
+            output[0],
+            output_path,
+            img_path,
+            img_selection,
+            self.flags,
+            self.img_height_width,
+            self.dequantance,
+            self.candidate,
+            self.class_num,
+            self.class_label
+        )
+
+class yolov5n_int8:
+    # input data
+    img = [
+        'tourist_area.jpg',
+        'bus.jpg',
+        'zidane.jpg'
+    ]
+
+    # model info
+    name = 'yolov5n-int8.tflite'
+    img_height_width = 640
+    input_name = 'serving_default_input_1:0'
+    input_shape = (1, img_height_width, img_height_width, 3)
+    input_dtype = 'int8'
+    flags = None
+
+    # dequantance info
+    dequantance = [0.004483491647988558 , -3]
+    candidate = 25200
+    class_num = 80
+    class_label = ['person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck', 'boat', 'traffic light', 'fire hydrant', 'stop sign', 'parking meter', 'bench', 'bird', 'cat', 'dog', 'horse', 'sheep', 'cow', 'elephant', 'bear', 'zebra', 'giraffe', 'backpack', 'umbrella', 'handbag', 'tie', 'suitcase', 'frisbee', 'skis', 'snowboard', 'sports ball', 'kite', 'baseball bat', 'baseball glove', 'skateboard', 'surfboard', 'tennis racket', 'bottle', 'wine glass', 'cup', 'fork', 'knife', 'spoon', 'bowl', 'banana', 'apple', 'sandwich', 'orange', 'broccoli', 'carrot', 'hot dog', 'pizza', 'donut', 'cake', 'chair', 'couch', 'potted plant', 'bed', 'dining table', 'toilet', 'tv', 'laptop', 'mouse', 'remote', 'keyboard', 'cell phone', 'microwave', 'oven', 'toaster', 'sink', 'refrigerator', 'book', 'clock', 'vase', 'scissors', 'teddy bear', 'hair drier', 'toothbrush']
+
+    def __init__(self):
+        """ if input name have `:`, change it to `_` or not. """
+    
+    def post_process(self, output, output_path, img_path, img_selection):
+        post_process_fitipower.post_process(
+            output[0],
+            output_path,
+            img_path,
+            img_selection,
+            self.flags,
+            self.img_height_width,
+            self.dequantance,
+            self.candidate,
+            self.class_num,
+            self.class_label
+        )
