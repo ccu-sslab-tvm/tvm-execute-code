@@ -113,13 +113,15 @@ autoScheduler_latency = output_path + '/total_latency.tsv'
 
 tar_file_path = output_path \
                 + f'/c_code@{board_name}' \
-                + '@NoneTuner' \
-                + '@aot' \
-                + ('@trans' if trans_layout else '@ori') \
+                + ('@NoneTuner' if not (use_autoTVM_log or use_autoScheduler_log) else '') \
+                + ('@autoTVM' if use_autoTVM_log else '') \
+                + ('@autoScheduler' if use_autoScheduler_log else '')\
+                + ('@graph' if executor_mode == 'graph' else '@aot') \
+                + ('@transLayout' if trans_layout else '@oriLayout') \
                 + ('@CMSIS' if use_cmsis else '@NoCMSIS') \
                 + '.tar'
 
-tvm_temp_path = '/home/yang880519/tvm_temp' # Warning：This folder will be removed every time.
+tvm_temp_path = '/home/yang880519/tvm_temp_microTVM' # Warning：This folder will be removed every time.
 
 if not os.path.exists(output_path):
     os.mkdir(output_path)
@@ -156,7 +158,7 @@ if img_path is not None:
         img_data = numpy.reshape(img_data, model_info.input_shape) / 255
 
     if verbose_output:
-        rawData = img_data.reshape(model_info.img_height_width*model_info.img_height_width)
+        rawData = numpy.reshape(img_data, numpy.prod(model_info.input_shape, axis=0))
         count = 0
         str_rawDara = '\r\n\t'
         for i in rawData:
