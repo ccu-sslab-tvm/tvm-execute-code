@@ -12,7 +12,7 @@ from tvm.contrib import graph_executor
 from tvm.relay.backend import Executor, Runtime
 from tvm.runtime.executor import AotModule
 
-from model_define import yolov5x_fp32 as model_define
+from model_define import tflite_yolov5x_fp32 as model_define
 
 # input setting
 input_index:int = 0 # for img or number
@@ -127,20 +127,28 @@ def run(model_info = model_define()):
             num_selection = numpy.array(num_selection) - 128
 
     # load model
-    model_buffer = open(model_path, 'rb').read()
+    if model_info.framework == 'tflite':
+        model_buffer = open(model_path, 'rb').read()
+        try:
+            import tflite
+            model = tflite.Model.GetRootAsModel(model_buffer, 0)
+        except AttributeError:
+            import tflite.Model
+            model = tflite.Model.Model.GetRootAsModel(model_buffer, 0)
 
-    try:
-        import tflite
-        model = tflite.Model.GetRootAsModel(model_buffer, 0)
-    except AttributeError:
-        import tflite.Model
-        model = tflite.Model.Model.GetRootAsModel(model_buffer, 0)
-
-    mod, params = relay.frontend.from_tflite(
-        model = model,
-        shape_dict = {model_info.input_name: model_info.input_shape},
-        dtype_dict = {model_info.input_name: model_info.input_dtype}
-    )
+        mod, params = relay.frontend.from_tflite(
+            model = model,
+            shape_dict = {model_info.input_name: model_info.input_shape},
+            dtype_dict = {model_info.input_name: model_info.input_dtype}
+        )
+    elif model_info.framework == 'torchscript':
+        import torch
+        model = torch.jit.load(model_path).eval()
+        mod, params = relay.frontend.from_pytorch(
+            script_module = model,
+            input_infos = [(model_info.input_name, model_info.input_shape)],
+            default_dtype = model_info.input_dtype
+        )
 
     if IR_output:
         print(mod, file = open(original_relay_path, 'w'))
