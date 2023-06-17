@@ -43,6 +43,7 @@ trials:int = 20000
 timeout:int = 120
 min_repeat_ms:int = 0
 early_stopping:int = 100
+enable_cpu_cache_flush:bool = False
 
 # tuner setting only for autoScheduler
 num_measures_per_round:int = 5
@@ -239,7 +240,7 @@ if tune_autoTVM:
         repeat = repeat,
         timeout = timeout,
         min_repeat_ms = min_repeat_ms,
-        enable_cpu_cache_flush = True,
+        enable_cpu_cache_flush = enable_cpu_cache_flush,
         module_loader = module_loader
     )
     measure_option = autotvm.measure_option(
@@ -324,7 +325,7 @@ if tune_autoScheduler:
         repeat = repeat, 
         timeout = timeout,
         min_repeat_ms = min_repeat_ms,
-        enable_cpu_cache_flush=True,
+        enable_cpu_cache_flush = enable_cpu_cache_flush,
         module_loader = module_loader
     )
     builder = auto_scheduler.LocalBuilder(
