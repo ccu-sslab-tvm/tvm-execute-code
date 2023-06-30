@@ -21,7 +21,7 @@ from model_define import choose_the_model as model_define
 input_index:int = 0 # for img or number
 
 # output setting
-IR_output:bool = 1
+IR_output:bool = 0 #極度花時間，常關
 verbose_output:bool = 1
 
 # ir setting
@@ -30,7 +30,7 @@ trans_layout:bool = 0
 
 # runtime setting
 board_name:str = 'stm32f429i_disc1'
-executor_mode:str = 'aot' #graph, aot
+executor_mode:str = 'graph' #graph, aot, debug
 test_time:int = 1
 
 # tuner setting
@@ -43,7 +43,7 @@ trials:int = 20000
 timeout:int = 120
 min_repeat_ms:int = 0
 early_stopping:int = 100
-enable_cpu_cache_flush:bool = False
+enable_cpu_cache_flush:bool = 1
 
 # tuner setting only for autoScheduler
 num_measures_per_round:int = 5
@@ -102,12 +102,12 @@ cmsis_relay_path = output_path + '/cmsis_mod.txt'
 
 autoTVM_record = output_path \
                 + f'/autoTVM@{board_name}' \
-                + ('@trans' if trans_layout else '@ori') \
+                + ('@transLayout' if trans_layout else '@oriLayout') \
                 + ('@CMSIS' if use_cmsis else '@NoCMSIS') \
                 + '.json' 
 autoScheduler_record = output_path \
                         + f'/autoScheduler@{board_name}' \
-                        + ('@trans' if trans_layout else '@ori') \
+                        + ('@transLayout' if trans_layout else '@oriLayout') \
                         + ('@CMSIS' if use_cmsis else '@NoCMSIS') \
                         + '.json'
 autoScheduler_latency = output_path + '/total_latency.tsv'
@@ -135,16 +135,16 @@ if output_c_code and (executor_mode == 'aot'):
 else:
     runtime = Runtime('crt', {'system-lib': True})
 
-if executor_mode == 'graph':
-    if output_c_code:
-        executor = Executor('graph', {"link-params": True})
-    else:
-        executor = Executor('graph')
-elif executor_mode == 'aot':
+if executor_mode == 'aot':
     if output_c_code:
         executor = Executor('aot', {"unpacked-api": True, "interface-api": "c"})
     else:
         executor = Executor('aot')
+else:
+    if output_c_code:
+        executor = Executor('graph', {"link-params": True})
+    else:
+        executor = Executor('graph')
 
 # image preprocess
 if img_path is not None:
@@ -335,7 +335,7 @@ if tune_autoScheduler:
         runtime = runtime
     )
     tuning_option = auto_scheduler.TuningOptions(
-        num_measure_trials = trials, 
+        num_measure_trials = trials,
         early_stopping = early_stopping,
         num_measures_per_round = num_measures_per_round, 
         builder = builder,
@@ -395,71 +395,79 @@ if output_c_code:
         with tarfile.open(tar_file_path, 'r:*') as tar_f:
             print('\n'.join(f' - {m.name}' for m in tar_f.getmembers()))
 
-# execute
-template_project = pathlib.Path(
-    tvm.micro.get_microtvm_template_projects('zephyr')
-)
-project_options = {
-    'project_type': project_type,
-    'board': board_name,
-    'config_main_stack_size': 8192,
-    'workspace_size_bytes': 168*1024,
-    'config_memc': 1, #aot & graph need
-    'config_sys_heap_big_only': 1, #graph need
-    'verbose': 1,
-}
-if use_cmsis:
-    project_options['cmsis_path'] = '~/CMSIS_5'
-    project_options['compile_definitions'] = [f'-DCOMPILE_WITH_CMSISNN=1']
-
-temp_dir = tempdir(tvm_temp_path)
-generated_project_path = temp_dir / 'tvm_project'
-generated_project = tvm.micro.generate_project(
-    template_project, lib, generated_project_path, project_options
-)
-generated_project.build()
-generated_project.flash()
-
-with tvm.micro.Session(transport_context_manager = generated_project.transport()) as session:
-    if executor_mode == 'graph':
-        model_executor = tvm.micro.create_local_graph_executor(
-            lib.get_graph_json(), session.get_system_lib(), session.device
-        )
-    elif executor_mode == 'aot':
-        model_executor = tvm.runtime.executor.aot_executor.AotModule(session.create_aot_executor())
-
-    if img_selection is not None:
-        model_executor.set_input(
-            model_info.input_name, 
-            img_data, 
-            **lib.get_params()
-        )
-    elif num_selection is not None:
-        model_executor.set_input(
-            model_info.input_name, 
-            tvm.nd.array(numpy.array(num_selection, dtype=model_info.input_dtype)), 
-            **lib.get_params()
-        )
-
-    total_time = 0.0
-    for time in range(test_time):
-        time_start = datetime.now().timestamp()
-        model_executor.run()
-        time_end = datetime.now().timestamp() # 計算 graph_mod 的執行時間
-        total_time += time_end - time_start
-        print('{0}. {1} -> {2}'.format(time+1, time_end - time_start, total_time))
-    avg_time = total_time / test_time
-    print('avg spent {0}'.format(avg_time))
-
-    tvm_output = model_executor.get_output(0).numpy()
-
-# post process
-try:
-    model_info.post_process(
-        tvm_output,
-        output_path,
-        img_path,
-        img_selection
+if not output_c_code:
+    # execute
+    template_project = pathlib.Path(
+        tvm.micro.get_microtvm_template_projects('zephyr')
     )
-except:
-    print(model_info.dequantance[0] * (tvm_output + model_info.dequantance[1]))
+    project_options = {
+        'project_type': project_type,
+        'board': board_name,
+        'config_main_stack_size': 8192,
+        'workspace_size_bytes': 168*1024,
+        'config_memc': 1, #aot & graph need
+        'config_sys_heap_big_only': 1, #graph need
+        'verbose': 1,
+    }
+    if use_cmsis:
+        project_options['cmsis_path'] = '~/CMSIS_5'
+        project_options['compile_definitions'] = [f'-DCOMPILE_WITH_CMSISNN=1']
+
+    temp_dir = tempdir(tvm_temp_path)
+    generated_project_path = temp_dir / 'tvm_project'
+    generated_project = tvm.micro.generate_project(
+        template_project, lib, generated_project_path, project_options
+    )
+    generated_project.build()
+    generated_project.flash()
+
+    with tvm.micro.Session(transport_context_manager = generated_project.transport()) as session:
+        if executor_mode == 'graph':
+            model_executor = tvm.micro.create_local_graph_executor(
+                lib.get_graph_json(), session.get_system_lib(), session.device
+            )
+        elif executor_mode == 'aot':
+            model_executor = tvm.micro.create_local_aot_executor(session)
+        elif executor_mode == 'debug':
+            model_executor = tvm.micro.create_local_debug_executor(
+                lib.get_graph_json(), session.get_system_lib(), session.device
+            )
+
+        if img_selection is not None:
+            model_executor.set_input(
+                model_info.input_name, 
+                img_data, 
+                **lib.get_params()
+            )
+        elif num_selection is not None:
+            model_executor.set_input(
+                model_info.input_name, 
+                tvm.nd.array(numpy.array(num_selection, dtype=model_info.input_dtype)), 
+                **lib.get_params()
+            )
+
+        total_time = 0.0
+        for time in range(test_time):
+            time_start = datetime.now().timestamp()
+            model_executor.run()
+            time_end = datetime.now().timestamp() # 計算 graph_mod 的執行時間
+            total_time += time_end - time_start
+            print('{0}. {1} -> {2}'.format(time+1, time_end - time_start, total_time))
+        avg_time = total_time / test_time
+        print('avg spent {0}'.format(avg_time))
+
+        if executor_mode == 'debug':
+            tvm_output = model_executor.debug_get_output(0).numpy()
+        else:
+            tvm_output = model_executor.get_output(0).numpy()
+
+    # post process
+    try:
+        model_info.post_process(
+            tvm_output,
+            output_path,
+            img_path,
+            img_selection
+        )
+    except:
+        print(model_info.dequantance[0] * (tvm_output + model_info.dequantance[1]))

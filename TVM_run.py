@@ -18,7 +18,7 @@ from model_define import tflite_yolov5x_fp32 as model_define
 input_index:int = 0 # for img or number
 
 # output setting
-IR_output:bool = 1
+IR_output:bool = 0 #極度花時間，常關
 verbose_output:bool = 1
 
 # ir setting
@@ -87,12 +87,12 @@ def run(model_info = model_define()):
 
     autoTVM_record = output_path \
                     + f'/autoTVM@{target}' \
-                    + ('@trans' if trans_layout else '@ori') \
+                    + ('@transLayout' if trans_layout else '@oriLayout') \
                     + ('@NoCMSIS') \
                     + '.json' 
     autoScheduler_record = output_path \
                             + f'/autoScheduler@{target}' \
-                            + ('@trans' if trans_layout else '@ori') \
+                            + ('@transLayout' if trans_layout else '@oriLayout') \
                             + ('@NoCMSIS') \
                             + '.json'
     autoScheduler_latency = output_path + '/total_latency.tsv'
