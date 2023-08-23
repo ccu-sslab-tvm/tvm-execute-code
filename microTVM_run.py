@@ -69,7 +69,7 @@ use_autoTVM_log:bool = 0
 use_autoScheduler_log:bool = 0
 
 # project_type for Zephyr
-project_type:str = 'host_driven'
+project_type:str = 'host_driven' #host_driven, fiti_aot_standalone
 
 # make C code
 output_c_code:bool = 0
@@ -130,18 +130,22 @@ if not os.path.exists(output_path):
 #----------------------------------------------------------------------------------------------------------------------
 # target define
 target = get_target('zephyr', board_name)
-if output_c_code and (executor_mode == 'aot'):
+target = tvm.target.Target(
+    target = target,
+    host = target
+)
+if (output_c_code or project_type == 'fiti_aot_standalone') and (executor_mode == 'aot'):
     runtime = Runtime('crt')
 else:
     runtime = Runtime('crt', {'system-lib': True})
 
 if executor_mode == 'aot':
-    if output_c_code:
+    if (output_c_code or project_type == 'fiti_aot_standalone'):
         executor = Executor('aot', {"unpacked-api": True, "interface-api": "c"})
     else:
         executor = Executor('aot')
 else:
-    if output_c_code:
+    if (output_c_code or project_type == 'fiti_aot_standalone'):
         executor = Executor('graph', {"link-params": True})
     else:
         executor = Executor('graph')
@@ -362,7 +366,7 @@ config = {
 }
 if use_cmsis:
     config['relay.ext.cmsisnn.options'] = {'mcpu': target.mcpu}
-if output_c_code and (executor_mode == 'aot'):
+if (output_c_code or project_type == 'fiti_aot_standalone') and (executor_mode == 'aot'):
     config['tir.usmp.enable'] = True
     config['tir.usmp.algorithm'] = 'hill_climb'
 if use_autoScheduler_log:
@@ -421,53 +425,54 @@ if not output_c_code:
     generated_project.build()
     generated_project.flash()
 
-    with tvm.micro.Session(transport_context_manager = generated_project.transport()) as session:
-        if executor_mode == 'graph':
-            model_executor = tvm.micro.create_local_graph_executor(
-                lib.get_graph_json(), session.get_system_lib(), session.device
-            )
-        elif executor_mode == 'aot':
-            model_executor = tvm.micro.create_local_aot_executor(session)
-        elif executor_mode == 'debug':
-            model_executor = tvm.micro.create_local_debug_executor(
-                lib.get_graph_json(), session.get_system_lib(), session.device
-            )
+    if not project_type == 'fiti_aot_standalone':
+        with tvm.micro.Session(transport_context_manager = generated_project.transport()) as session:
+            if executor_mode == 'graph':
+                model_executor = tvm.micro.create_local_graph_executor(
+                    lib.get_graph_json(), session.get_system_lib(), session.device
+                )
+            elif executor_mode == 'aot':
+                model_executor = tvm.micro.create_local_aot_executor(session)
+            elif executor_mode == 'debug':
+                model_executor = tvm.micro.create_local_debug_executor(
+                    lib.get_graph_json(), session.get_system_lib(), session.device
+                )
 
-        if img_selection is not None:
-            model_executor.set_input(
-                model_info.input_name, 
-                img_data, 
-                **lib.get_params()
+            if img_selection is not None:
+                model_executor.set_input(
+                    model_info.input_name, 
+                    img_data, 
+                    **lib.get_params()
+                )
+            elif num_selection is not None:
+                model_executor.set_input(
+                    model_info.input_name, 
+                    tvm.nd.array(numpy.array(num_selection, dtype=model_info.input_dtype)), 
+                    **lib.get_params()
+                )
+
+            total_time = 0.0
+            for time in range(test_time):
+                time_start = datetime.now().timestamp()
+                model_executor.run()
+                time_end = datetime.now().timestamp() # 計算 graph_mod 的執行時間
+                total_time += time_end - time_start
+                print('{0}. {1} -> {2}'.format(time+1, time_end - time_start, total_time))
+            avg_time = total_time / test_time
+            print('avg spent {0}'.format(avg_time))
+
+            if executor_mode == 'debug':
+                tvm_output = model_executor.debug_get_output(0).numpy()
+            else:
+                tvm_output = model_executor.get_output(0).numpy()
+
+        # post process
+        try:
+            model_info.post_process(
+                tvm_output,
+                output_path,
+                img_path,
+                img_selection
             )
-        elif num_selection is not None:
-            model_executor.set_input(
-                model_info.input_name, 
-                tvm.nd.array(numpy.array(num_selection, dtype=model_info.input_dtype)), 
-                **lib.get_params()
-            )
-
-        total_time = 0.0
-        for time in range(test_time):
-            time_start = datetime.now().timestamp()
-            model_executor.run()
-            time_end = datetime.now().timestamp() # 計算 graph_mod 的執行時間
-            total_time += time_end - time_start
-            print('{0}. {1} -> {2}'.format(time+1, time_end - time_start, total_time))
-        avg_time = total_time / test_time
-        print('avg spent {0}'.format(avg_time))
-
-        if executor_mode == 'debug':
-            tvm_output = model_executor.debug_get_output(0).numpy()
-        else:
-            tvm_output = model_executor.get_output(0).numpy()
-
-    # post process
-    try:
-        model_info.post_process(
-            tvm_output,
-            output_path,
-            img_path,
-            img_selection
-        )
-    except:
-        print(model_info.dequantance[0] * (tvm_output + model_info.dequantance[1]))
+        except:
+            print(model_info.dequantance[0] * (tvm_output + model_info.dequantance[1]))
